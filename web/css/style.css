@@ -1,0 +1,295 @@
+/* 8-bit 像素风：Sweetie-16 调色板 + 4px 像素格 + 梯形缺角边框 */
+
+@font-face {
+  font-family: "Fusion Pixel";
+  src: url("../assets/fonts/fusion-pixel-12px-zh_hans.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  --ink: #1a1c2c;
+  --paper: #f4f4f4;
+  --gold: #ffcd75;
+  --orange: #ef7d57;
+  --purple: #5d275d;
+  --navy: #29366f;
+  --cyan: #73eff7;
+  --slate: #333c57;
+  --mist: #94b0c2;
+
+  --px: 4px;     /* 一个“像素格” */
+  --btn: 64px;   /* 2×2 按钮的边长 */
+  --icon: 36px;  /* 按钮图标：12 格 × 3 */
+  --av: 48px;    /* 头像：12 格 × 4。图标/头像尺寸必须是 12 的整数倍，像素才不会糊 */
+  --font: "Fusion Pixel", "PingFang SC", "Microsoft YaHei", monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  /* 棋盘格底纹 */
+  background: conic-gradient(#14152a 25%, #0f101c 0 50%, #14152a 0 75%, #0f101c 0) 0 0 / 8px 8px;
+  color: var(--paper);
+  font: 16px/1.6 var(--font);
+  -webkit-text-size-adjust: 100%;
+  overflow: hidden; /* 页面本身不滚动，只有对话区滚动 */
+}
+
+/* ---------- 像素方框：用 4 个硬阴影画出缺角边框，内阴影做立体感 ---------- */
+.px-box {
+  --edge: var(--paper);
+  --fill: var(--navy);
+  --shade: rgba(0, 0, 0, .35);
+  position: relative;
+  background: var(--fill);
+  box-shadow:
+    0 calc(-1 * var(--px)) 0 0 var(--edge),
+    0 var(--px) 0 0 var(--edge),
+    calc(-1 * var(--px)) 0 0 0 var(--edge),
+    var(--px) 0 0 0 var(--edge),
+    inset calc(-1 * var(--px)) calc(-1 * var(--px)) 0 0 var(--shade);
+}
+
+.sprite { display: block; }
+.sprite svg { display: block; width: 100%; height: 100%; }
+
+/* ---------- 整体布局 ---------- */
+.app {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: min(100%, 480px);
+  height: 100vh;
+  height: 100dvh;
+  margin: 0 auto;
+  /* 留出刘海屏 / 圆角屏的安全区 */
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(8px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background: var(--ink);
+  box-shadow: calc(-1 * var(--px)) 0 0 0 var(--slate), var(--px) 0 0 0 var(--slate);
+}
+
+/* CRT 扫描线（很淡） */
+.app::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(to bottom, rgba(0, 0, 0, .10) 0 2px, transparent 2px 4px);
+}
+
+/* ---------- 顶部：演出区 + 2×2 按钮 ---------- */
+.top {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 20px;
+  margin: var(--px);
+}
+
+.stage {
+  --shade: transparent;
+  --fill: var(--ink);
+  min-height: calc(var(--btn) * 2 + 12px);
+  overflow: hidden;
+}
+
+/* canvas 铺满演出区且不参与排版；逻辑分辨率由 app.js 按容器尺寸设置 */
+.stage canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+}
+
+.stage-tag {
+  position: absolute;
+  left: 8px;
+  bottom: 6px;
+  padding: 0 6px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--mist);
+  background: rgba(26, 28, 44, .75);
+}
+
+.menu {
+  display: grid;
+  grid-template-columns: repeat(2, var(--btn));
+  gap: 12px;
+}
+
+.px-btn {
+  --fill: var(--navy);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: var(--btn);
+  height: var(--btn);
+  padding: 0;
+  border: 0;
+  color: var(--paper);
+  font: 12px/1 var(--font);
+  cursor: pointer;
+  touch-action: manipulation; /* 手机上不会双击缩放 */
+  -webkit-tap-highlight-color: transparent;
+}
+.px-btn .sprite { width: var(--icon); height: var(--icon); }
+.px-btn:hover { --fill: #3b5dc9; }
+.px-btn:active { --fill: var(--ink); --shade: transparent; transform: translateY(var(--px)); }
+.px-btn:focus-visible { outline: var(--px) dashed var(--gold); outline-offset: calc(2 * var(--px)); }
+
+/* ---------- 对话 ---------- */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 8px 24px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mist) var(--ink);
+}
+.chat::-webkit-scrollbar { width: 8px; }
+.chat::-webkit-scrollbar-track { background: var(--ink); }
+.chat::-webkit-scrollbar-thumb { background: var(--mist); }
+
+.msg {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  animation: pop .24s steps(3) both;
+}
+.msg.right { flex-direction: row-reverse; }
+
+/* 每个说话者的配色 */
+.sp-env { --accent: var(--gold);   --bubble: var(--slate); }
+.sp-a   { --accent: var(--cyan);   --bubble: var(--navy); }
+.sp-b   { --accent: var(--orange); --bubble: var(--purple); }
+
+.avatar {
+  --fill: var(--ink);
+  --edge: var(--accent);
+  flex: none;
+  width: calc(var(--av) + 8px);
+  height: calc(var(--av) + 8px);
+  padding: 4px;
+  margin: var(--px);
+}
+.avatar .sprite { width: var(--av); height: var(--av); }
+
+.bubble {
+  --fill: var(--bubble);
+  flex: 1;
+  min-width: 0;
+  margin: var(--px) 0;
+  padding: 8px 12px 10px;
+}
+.bubble .name {
+  margin-bottom: 2px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--accent);
+}
+.bubble .text {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 打字机光标 */
+.msg.typing .text::after {
+  content: "";
+  display: inline-block;
+  width: .5em;
+  height: 1em;
+  margin-left: 2px;
+  vertical-align: -.15em;
+  background: var(--accent);
+  animation: blink .8s steps(1) infinite;
+}
+
+/* ---------- 提示 ---------- */
+.toast {
+  --fill: var(--ink);
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 10;
+  padding: 8px 16px;
+  transform: translateX(-50%);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.toast[hidden] { display: none; }
+
+@keyframes pop   { from { transform: translateY(8px); opacity: 0; } }
+@keyframes blink { 50% { opacity: 0; } }
+
+/* 窄屏手机（≤380px）：按钮、间距收紧 */
+@media (max-width: 380px) {
+  :root { --btn: 56px; }
+  .app {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .top { gap: 12px; }
+  .msg { gap: 12px; }
+  .chat { padding-inline: 4px; }
+}
+
+/* 矮屏横屏（手机横过来 / 很矮的窗口）：左边演出区+按钮，右边对话，各自占满高度 */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app {
+    flex-direction: row;
+    width: min(100%, 960px);
+    gap: 24px;
+  }
+  .top {
+    flex: 0 0 42%;
+    display: flex;
+    flex-direction: column;
+    align-self: flex-start;
+    gap: 16px;
+  }
+  .stage {
+    min-height: 0;
+    aspect-ratio: 160 / 68;
+  }
+  .menu { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+  .px-btn { width: auto; }
+  .chat { padding-top: 4px; }
+}
+
+/* 电脑（又宽又高的窗口）：竖条放宽到 1000px，按钮/头像整数倍放大；
+   消息按左右分居，气泡不会被拉得太长 */
+@media (min-width: 900px) and (min-height: 600px) {
+  :root { --btn: 96px; --icon: 48px; --av: 60px; }
+  .app { width: min(100%, 1000px); }
+  .px-btn { font-size: 16px; }
+  .msg { width: min(100%, 760px); }
+  .msg.left { align-self: flex-start; }
+  .msg.right { align-self: flex-end; }
+}
+
+/* 大屏显示器 */
+@media (min-width: 1600px) and (min-height: 800px) {
+  :root { --btn: 112px; --icon: 60px; --av: 72px; }
+  .app { width: min(100%, 1200px); }
+  .msg { width: min(100%, 880px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .msg, .msg.typing .text::after { animation: none; }
+}
+.instant .msg { animation: none; }
