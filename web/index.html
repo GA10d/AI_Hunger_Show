@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>AI 饥饿秀</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
@@ -12,10 +13,10 @@
       <!-- 演出区（占位）：后续用 2D 像素 sprite 在这块 canvas 上演出 -->
       <section class="stage px-box" aria-label="演出区">
         <canvas id="stage-canvas" width="160" height="68"></canvas>
-        <span class="stage-tag">STAGE · 演出区</span>
+        <span class="stage-tag" id="stage-tag">STAGE · 演出区</span>
       </section>
 
-      <!-- 2×2 按钮（占位） -->
+      <!-- 2×2 按钮：“墓园”会弹出墓园，其余先占位 -->
       <nav class="menu" aria-label="菜单">
         <button class="px-box px-btn" type="button" data-action="world">
           <span class="sprite" data-sprite="globe"></span><span class="label">地球世界</span>
@@ -23,8 +24,8 @@
         <button class="px-box px-btn" type="button" data-action="music">
           <span class="sprite" data-sprite="note"></span><span class="label">音乐</span>
         </button>
-        <button class="px-box px-btn" type="button" data-action="roles">
-          <span class="sprite" data-sprite="person"></span><span class="label">角色</span>
+        <button class="px-box px-btn" type="button" data-action="graveyard">
+          <span class="sprite" data-sprite="tomb"></span><span class="label">墓园</span>
         </button>
         <button class="px-box px-btn" type="button" data-action="tip">
           <span class="sprite" data-sprite="coin"></span><span class="label">打赏</span>
@@ -36,9 +37,25 @@
     <section id="chat" class="chat" aria-live="polite" aria-label="对话"></section>
   </main>
 
+  <!-- 墓园：墓碑列表 / 人物生平 -->
+  <div id="roles" class="modal" role="dialog" aria-modal="true" aria-labelledby="roles-title" hidden>
+    <div class="modal-panel px-box">
+      <header class="modal-head">
+        <button class="px-box px-btn px-btn-s" id="roles-back" type="button" hidden>返回</button>
+        <h2 id="roles-title">墓园</h2>
+        <button class="px-box px-btn px-btn-s" id="roles-close" type="button">关闭</button>
+      </header>
+      <div class="modal-body" id="roles-body"></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast px-box" role="status" hidden></div>
 
   <script src="js/sprites.js"></script>
+  <script src="js/stage.js"></script>
+  <script src="js/chat.js"></script>
+  <script src="js/roles.js"></script>
+  <script src="js/demo.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

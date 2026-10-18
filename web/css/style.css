@@ -15,7 +15,18 @@
   --navy: #29366f;
   --cyan: #73eff7;
   --slate: #333c57;
+  --steel: #566c86;
   --mist: #94b0c2;
+
+  /* 阶梯形轮廓：--tomb 是拱顶（墓碑），--notch 是四角缺角（死亡框） */
+  --tomb: polygon(0 24px, 8px 24px, 8px 16px, 16px 16px, 16px 8px, 24px 8px, 24px 0,
+    calc(100% - 24px) 0, calc(100% - 24px) 8px, calc(100% - 16px) 8px, calc(100% - 16px) 16px,
+    calc(100% - 8px) 16px, calc(100% - 8px) 24px, 100% 24px, 100% 100%, 0 100%);
+  --notch: polygon(0 8px, 4px 8px, 4px 4px, 8px 4px, 8px 0,
+    calc(100% - 8px) 0, calc(100% - 8px) 4px, calc(100% - 4px) 4px, calc(100% - 4px) 8px, 100% 8px,
+    100% calc(100% - 8px), calc(100% - 4px) calc(100% - 8px), calc(100% - 4px) calc(100% - 4px),
+    calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) 100%,
+    8px 100%, 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px));
 
   --px: 4px;     /* 一个“像素格” */
   --btn: 64px;   /* 2×2 按钮的边长 */
@@ -112,9 +123,13 @@ body {
   position: absolute;
   left: 8px;
   bottom: 6px;
+  max-width: calc(100% - 16px);
   padding: 0 6px;
   font-size: 12px;
   line-height: 18px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--mist);
   background: rgba(26, 28, 44, .75);
 }
@@ -172,10 +187,111 @@ body {
 }
 .msg.right { flex-direction: row-reverse; }
 
-/* 每个说话者的配色 */
-.sp-env { --accent: var(--gold);   --bubble: var(--slate); }
-.sp-a   { --accent: var(--cyan);   --bubble: var(--navy); }
-.sp-b   { --accent: var(--orange); --bubble: var(--purple); }
+/* 说话者的配色：环境 / 选手（--accent 会被 JS 按头像覆盖，同场两位选手各有各的颜色） */
+.sp-env    { --accent: var(--gold); --bubble: var(--slate); }
+.sp-player { --accent: var(--cyan); --bubble: var(--navy); }
+
+/* ---------- 遗言轮：墓碑形的气泡，两侧烛光，字一个一个慢慢“刻”上去 ---------- */
+.sp-ghost .avatar { --edge: var(--steel); animation: float 2.4s steps(4) infinite; }
+.sp-ghost .avatar .sprite { filter: grayscale(1) brightness(.9); opacity: .6; }
+.tomb-bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  padding: 24px 20px 16px;
+  text-align: center;
+  background: var(--steel); /* 边框色 */
+  clip-path: var(--tomb);
+}
+.tomb-bubble::before { /* 石面：同样的阶梯形，缩进 4px，就得到 4px 的像素边框 */
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: #262b44;
+  clip-path: var(--tomb);
+}
+.tomb-bubble > * { position: relative; }
+.epitaph-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--mist);
+}
+.epitaph-head .candle { flex: none; width: 24px; height: 24px; animation: flicker 1.1s steps(2) infinite; }
+.epitaph-head .candle:last-child { animation-delay: .55s; }
+.tomb-bubble .text { color: #cfd9e0; text-shadow: 0 -2px 0 #14152a, 0 2px 0 var(--steel); } /* 刻痕 */
+
+/* ---------- 死亡轮：红黑色的死亡框，缺角 + 虚线内框，出现时震一下 ---------- */
+.death-box {
+  position: relative;
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: min(100%, 640px);
+  margin: 8px 0;
+  padding: 18px 22px;
+  border: 0;
+  background: #b13e53; /* 边框色 */
+  color: var(--paper);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  clip-path: var(--notch);
+  animation: doom .7s steps(14) both;
+  -webkit-tap-highlight-color: transparent;
+}
+.death-box::before {
+  content: "";
+  position: absolute;
+  inset: 4px;
+  background: #2a0f1d;
+  clip-path: var(--notch);
+}
+.death-box:hover::before { background: #3b1427; }
+.death-box::after { /* 虚线内框 */
+  content: "";
+  position: absolute;
+  inset: 12px;
+  border: var(--px) dashed rgba(177, 62, 83, .6);
+  pointer-events: none;
+}
+.death-box:focus-visible { outline: 0; }
+.death-box:focus-visible::after { border-style: solid; border-color: var(--gold); }
+.death-box > .sprite, .death-box > .d-body, .death-box > .gav { position: relative; z-index: 1; }
+.death-box .skull { flex: none; width: var(--icon); height: var(--icon); }
+.d-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.d-title { font-size: 18px; line-height: 1.4; letter-spacing: .08em; color: #e0607a; text-shadow: 0 2px 0 #14080f; }
+.d-cause { font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.d-meta { font-size: 12px; line-height: 1.5; color: var(--mist); }
+.death-box .gav { --g-icon: 36px; --edge: #b13e53; flex: none; }
+.death-box .gav .sprite { filter: grayscale(1) brightness(.8); }
+
+/* 分隔条：入场 / 死亡 */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 8px;
+  color: var(--mist);
+  font-size: 14px;
+  line-height: 1.5;
+  animation: pop .24s steps(3) both;
+}
+.divider::before, .divider::after {
+  content: "";
+  flex: 1 1 16px;
+  min-width: 16px;
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--slate) 0 8px, transparent 8px 12px);
+}
+.divider .sprite { flex: none; width: 24px; height: 24px; }
+.divider .dtext { flex: 0 1 auto; text-align: center; overflow-wrap: anywhere; }
 
 .avatar {
   --fill: var(--ink);
@@ -219,13 +335,143 @@ body {
   animation: blink .8s steps(1) infinite;
 }
 
+/* ---------- 角色页（弹窗） ---------- */
+.px-btn-s { /* 小按钮：弹窗里的“返回/关闭” */
+  flex-direction: row;
+  width: auto;
+  height: 36px;
+  padding: 0 12px;
+  font-size: 14px;
+}
+.px-btn-s[hidden] { display: none; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding:
+    max(16px, env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+  background: rgba(10, 10, 20, .8);
+}
+.modal[hidden] { display: none; }
+
+.modal-panel {
+  --fill: var(--ink);
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 600px);
+  height: min(100%, 760px);
+  margin: var(--px);
+}
+.modal-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: var(--px) solid var(--slate);
+}
+.modal-head h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.4;
+  color: var(--gold);
+  overflow-wrap: anywhere;
+}
+.modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 16px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--mist) var(--ink);
+}
+.modal-body::-webkit-scrollbar { width: 8px; }
+.modal-body::-webkit-scrollbar-track { background: var(--ink); }
+.modal-body::-webkit-scrollbar-thumb { background: var(--mist); }
+
+.empty { margin: 24px 0; text-align: center; color: var(--mist); }
+
+/* 墓园列表：石碑 | 头像 | 名字+死因 | 存活轮数 */
+.grave-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 0;
+  padding: 0 var(--px);
+  list-style: none;
+}
+.grave {
+  --fill: var(--slate);
+  --edge: var(--steel);
+  --g-icon: 48px;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px;
+  border: 0;
+  color: var(--paper);
+  font: inherit;
+  text-align: left;
+}
+button.grave { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.grave:hover { --edge: var(--gold); }
+button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offset: calc(2 * var(--px)); }
+.grave.alive { --fill: var(--navy); --edge: var(--cyan); }
+.grave .gtomb { width: var(--g-icon); height: var(--g-icon); }
+.gav {
+  --fill: var(--ink);
+  --shade: transparent;
+  --edge: var(--cyan);
+  display: block;
+  width: calc(var(--g-icon) + 8px);
+  height: calc(var(--g-icon) + 8px);
+  padding: 4px;
+  margin: var(--px);
+}
+.gav .sprite { width: var(--g-icon); height: var(--g-icon); }
+.gav.big { --g-icon: 60px; }
+.grave .who { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.gname { color: var(--gold); font-size: 18px; line-height: 1.4; overflow-wrap: anywhere; }
+.gcause { color: var(--paper); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
+.gmeta { color: var(--mist); font-size: 12px; line-height: 1.5; white-space: nowrap; }
+.grave .gmeta { display: flex; flex-direction: column; align-items: flex-end; }
+
+/* 人物生平 */
+.bio { padding: 0 var(--px); }
+.bio-head { display: flex; align-items: center; gap: 16px; }
+.bio-head .gtomb { flex: none; width: 48px; height: 48px; }
+.bio-head .gav { flex: none; }
+.bio-info { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.bio-info .gmeta { white-space: normal; }
+.bio h3 {
+  margin: 24px 0 8px;
+  padding-bottom: 4px;
+  border-bottom: var(--px) solid var(--slate);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--gold);
+}
+.bio p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.bio .last-words { color: var(--mist); }
+.bio .empty { margin: 8px 0; text-align: left; }
+
 /* ---------- 提示 ---------- */
 .toast {
   --fill: var(--ink);
   position: fixed;
   left: 50%;
   bottom: 28px;
-  z-index: 10;
+  z-index: 30;
   padding: 8px 16px;
   transform: translateX(-50%);
   font-size: 14px;
@@ -233,8 +479,19 @@ body {
 }
 .toast[hidden] { display: none; }
 
-@keyframes pop   { from { transform: translateY(8px); opacity: 0; } }
-@keyframes blink { 50% { opacity: 0; } }
+@keyframes pop     { from { transform: translateY(8px); opacity: 0; } }
+@keyframes blink   { 50% { opacity: 0; } }
+@keyframes float   { 50% { transform: translateY(-6px); } }  /* 遗言的头像像幽灵一样飘 */
+@keyframes flicker { 50% { opacity: .5; } }                  /* 烛光 */
+@keyframes doom {                                            /* 死亡框：闪白、震动、落定 */
+  0%   { transform: translateX(0); filter: brightness(3) grayscale(1); opacity: 0; }
+  10%  { opacity: 1; }
+  25%  { transform: translateX(-8px); }
+  45%  { transform: translateX(8px); filter: none; }
+  65%  { transform: translateX(-4px); }
+  85%  { transform: translateX(4px); }
+  100% { transform: none; filter: none; }
+}
 
 /* 窄屏手机（≤380px）：按钮、间距收紧 */
 @media (max-width: 380px) {
@@ -246,6 +503,19 @@ body {
   .top { gap: 12px; }
   .msg { gap: 12px; }
   .chat { padding-inline: 4px; }
+
+  .grave { --g-icon: 36px; gap: 8px; padding: 8px; }
+  .gname { font-size: 16px; }
+  .modal-head { padding: 12px; gap: 8px; }
+  .modal-body { padding: 12px 8px; }
+}
+
+/* 手机宽度（≤430px）：墓园条目的石碑和头像占两行，名字/死因在上，存活轮数在下，给文字让出宽度 */
+@media (max-width: 430px) {
+  .grave { grid-template-columns: auto auto 1fr; }
+  .grave .gtomb, .grave .gav { grid-row: 1 / span 2; }
+  .grave .who { grid-column: 3; }
+  .grave .gmeta { grid-column: 3; grid-row: 2; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; }
 }
 
 /* 矮屏横屏（手机横过来 / 很矮的窗口）：左边演出区+按钮，右边对话，各自占满高度 */
@@ -276,10 +546,13 @@ body {
 @media (min-width: 900px) and (min-height: 600px) {
   :root { --btn: 96px; --icon: 48px; --av: 60px; }
   .app { width: min(100%, 1000px); }
+  .modal-panel { width: min(100%, 720px); }
   .px-btn { font-size: 16px; }
   .msg { width: min(100%, 760px); }
   .msg.left { align-self: flex-start; }
   .msg.right { align-self: flex-end; }
+  .death-box .gav { --g-icon: 48px; }
+  .d-title { font-size: 20px; }
 }
 
 /* 大屏显示器 */
@@ -290,6 +563,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .msg.typing .text::after { animation: none; }
+  .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box { animation: none; }
 }
-.instant .msg { animation: none; }
+.instant .msg, .instant .divider, .instant .death-box { animation: none; }

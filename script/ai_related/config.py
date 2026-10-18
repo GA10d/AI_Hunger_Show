@@ -15,6 +15,16 @@ SUMMARY_MODEL = DEFAULT_MODEL
 COMPRESS_THRESHOLD_TOKENS = 60_000
 KEEP_RECENT = 12
 
+# Player lifespan: normal distribution truncated to [MIN, MAX] rounds (one round = one player action)
+LIFESPAN_MIN = 2
+LIFESPAN_MAX = 80
+LIFESPAN_MEAN = 41
+LIFESPAN_SD = 15
+
+# At most two players are on the field. The game starts with one. When a player dies:
+SPAWN_IF_TWO = 0.25      # two were on the field: chance that one new player is born
+SPAWN_TWO_IF_ONE = 0.10  # one was on the field: chance that two are born (otherwise exactly one)
+
 # USD per 1M tokens at peak hours: (input cache hit, input cache miss, output).
 # Off-peak is half of peak.
 _PEAK_PRICES = {
