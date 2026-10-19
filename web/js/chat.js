@@ -4,6 +4,7 @@
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
  *   HungerChat.add({ kind: 'sacred', variant: 'guess' | 'deny' | 'grant' | 'freedom', title, text, note, instant }, onShow)
  *   HungerChat.add({ kind: 'signal' }, onShow)   // 不显示任何东西，只在轮到它时调用 onShow
+ * thought = 选手脑子里想的（HungerChat.add({ kind: 'message', who: 'player', thought: true, ... })）：虚线气泡，没有头像，字更快；
  * ghost  = 遗言轮：墓碑形的气泡，烛光、慢速打字；
  * death  = 死亡轮：红黑色的“死亡框”，出现时震一下，点击可以打开这个人的生平；
  * sacred = 宣告 / 审判 / 获释：神圣的拱顶、金光、一个字一个字显现。
@@ -23,7 +24,17 @@
   const nearBottom = () => chat.scrollHeight - chat.scrollTop - chat.clientHeight < 80;
   const toBottom = () => { chat.scrollTop = chat.scrollHeight; };
 
+  function buildThought(item) { // 心想：虚线气泡，没有头像（头像留给下面那句发言），只有观众看得见
+    const el = document.createElement('article');
+    el.className = 'msg right sp-player sp-thought';
+    el.style.setProperty('--accent', Sprites.accent(item.avatar));
+    el.innerHTML = '<div class="avatar-gap"></div><div class="bubble thought-bubble"><div class="name"></div><p class="text"></p></div>';
+    el.querySelector('.name').textContent = `${item.name} · 心想`;
+    return el;
+  }
+
   function buildMessage(item) {
+    if (item.thought) return buildThought(item);
     const isEnv = item.who === 'env';
     const el = document.createElement('article');
     el.className = `msg ${isEnv ? 'left sp-env' : 'right sp-player'}${item.ghost ? ' sp-ghost' : ''}`;
@@ -126,8 +137,8 @@
     el.classList.add('typing');
     append(el);
     // 遗言一字一字慢慢刻；宣告更庄重，更慢
-    const speed = sacred ? 95 : item.ghost ? 80 : 32;
-    const after = sacred ? (item.variant === 'guess' ? 1800 : 1200) : item.ghost ? 900 : 500; // 宣告之后停顿，等待审判
+    const speed = sacred ? 95 : item.ghost ? 80 : item.thought ? 20 : 32;
+    const after = sacred ? (item.variant === 'guess' ? 1800 : 1200) : item.ghost ? 900 : item.thought ? 350 : 500; // 宣告之后停顿，等待审判
     typeInto(el.querySelector('.text'), item.text, instant, speed, () => {
       el.classList.remove('typing');
       setTimeout(next, instant ? 0 : after);

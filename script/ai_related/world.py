@@ -1,7 +1,7 @@
 """A world = a folder of prompts under words/.
 
     words/<world>/
-        world.json                  optional: {"name": "...", "echo_wall": true}
+        world.json                  optional: {"name": "...", "echo_wall": true, "env_knows_truth": true}
         readme.md                   notes for the designer (spoilers, never given to a model)
         system prompt/
             tribute.md              the player's persona and public setting
@@ -41,6 +41,9 @@ class World:
     # The "圣言" page: every entry of the worldview, for the audience. An entry with a "rule" id (the id the
     # judge uses, e.g. "R1") is counted every time the judge applies it; the others are plain truths.
     scripture: list = field(default_factory=list)
+    # a host who knows the answer (a "soup master") is told what each blank on the echo wall used to be, so it can
+    # answer questions about it truthfully; a pure narrator is not
+    env_knows_truth: bool = False
 
 
 def resolve_world_dir(world: str | Path | None) -> Path:
@@ -79,4 +82,5 @@ def load_world(world: str | Path | None = None) -> World:
                  env=prompt("playground.md", DEFAULT_ENV),
                  judge=judge if len(judge) >= MIN_PROMPT_CHARS else None,
                  oracle=oracle if len(oracle) >= MIN_PROMPT_CHARS else None,
-                 echo_wall=bool(meta.get("echo_wall", False)), root=root, scripture=scripture)
+                 echo_wall=bool(meta.get("echo_wall", False)), root=root, scripture=scripture,
+                 env_knows_truth=bool(meta.get("env_knows_truth", False)))

@@ -2,3 +2,5 @@
 logs/
 __pycache__/
 *.pyc
+
+launcher_settings.json

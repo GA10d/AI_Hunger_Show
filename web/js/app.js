@@ -46,6 +46,12 @@
       const p = state.alive.get(ev.player_id);
       if (p) p.age = ev.age;
     };
+    // 选手脑子里想的（只有观众看得到）：先出一个虚线的“心想”气泡，再出他说出口的话
+    const thought = e => {
+      if (e.thought) {
+        HungerChat.add({ kind: 'message', who: 'player', name: e.name, avatar: e.avatar, text: e.thought, thought: true, instant }, show());
+      }
+    };
     switch (ev.type) {
       case 'spawn': {
         const p = ev.player;
@@ -56,14 +62,17 @@
         break;
       }
       case 'message':
+        thought(ev);
         HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, text: ev.text, instant },
           show(tick));
         break;
       case 'lastwords':
+        thought(ev);
         HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, text: ev.text,
           ghost: true, instant }, show(tick));
         break;
       case 'guess': // 宣告：向门外的存在说出还原的全部真相
+        thought(ev);
         HungerChat.add({ kind: 'sacred', variant: 'guess', title: `${ev.name} 的宣告`, text: ev.text, instant },
           show(tick));
         break;

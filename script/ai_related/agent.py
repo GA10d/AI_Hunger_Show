@@ -31,7 +31,13 @@ def _json_instruction(instruction: str, example) -> str:
 
 
 def _parse_json(content: str, validator):
-    data = json.loads(_FENCE.sub("", content.strip()))
+    text = _FENCE.sub("", content.strip())
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as e:
+        if not e.msg.startswith("Extra data"):
+            raise
+        data, _ = json.JSONDecoder().raw_decode(text)  # two objects or trailing prose: keep the first object
     if validator is not None:
         ok = validator(data)
         if ok is False:

@@ -25,6 +25,7 @@ web/
 - `GET /api/events`（SSE）：事件流。刚连上时先回放最近的历史（带 `replay: true`，页面瞬间渲染），之后是实时事件。
   `spawn`（选手入场）/ `message`（`who: env | player`）/ `lastwords`（遗言）/ `guess`（宣告）/ `verdict`（审判，`correct`）/
   `death`（带完整墓碑记录）/ `victory`（胜利，同胞获释）/ `stop` / `error`。
+  选手的 `message` / `lastwords` / `guess` 还可能带 `thought`（他脑子里想的，只给观众看，页面画成虚线的“心想”气泡）。
   所有事件都带 `session`（后端每次启动不同，页面据此清掉上一次"在世"的人），大部分带 `round`（世界的绝对轮数，显示在舞台标签上）。
 - `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at`。
   `kind`：`natural` 寿命耗尽 / `execution` 违规被处决 / `suicide` 自尽 / `wrong_guess` 宣告错误 / `victory` 胜利（墓园里显示成金星）。
@@ -36,7 +37,7 @@ web/
 - `/music/<文件>`：音乐文件（支持 Range，可以随意拖动 / 跳转）。页面里用相对路径 `../music/<文件>` 引用，
   所以从磁盘直接打开、VSCode Live Server（以仓库根目录为根）、python 服务器三种方式都找得到。
 
-对话区的特殊条目（`chat.js`）：`message` + `ghost`（遗言轮：墓碑形气泡）、`death`（死亡轮：红黑死亡框，点开生平）、
+对话区的特殊条目（`chat.js`）：`message` + `thought`（心想：虚线暗色气泡，没有头像，字出得更快，出现在对应发言之前）、`message` + `ghost`（遗言轮：墓碑形气泡）、`death`（死亡轮：红黑死亡框，点开生平）、
 `sacred`（宣告 / 审判 / 获释：神圣拱顶，`variant` 为 `guess` `deny` `grant` `freedom`）、`divider`（入场/暂停）。
 调试：演示数据（`js/demo.js`）里有以上全部种类，直接双击 `index.html` 就能看到。
 

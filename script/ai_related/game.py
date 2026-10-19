@@ -23,6 +23,7 @@ import json
 import random
 import threading
 import time
+import warnings
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
@@ -71,7 +72,7 @@ RULES_ENV = """
 - 收到「系统」消息表示有新选手入场、选手死亡或其他变化：新选手入场时，向他描述眼前的情景并抛出第一个情境；选手死亡时，如实描写现场；场上已有选手时，让情景和之前的剧情自然衔接。
 - 选手可能留下遗言，但你看不到，也不要去猜测。"""
 
-TURN_EXAMPLE = {"action": "speak", "content": "你要说的话，或要做的事"}
+TURN_EXAMPLE = {"thought": "你脑子里的想法（只有你自己知道）", "action": "speak", "content": "你说出口的话，或你做出的事"}
 
 
 def player_rules(actions: list[str]) -> str:
@@ -87,7 +88,10 @@ def player_rules(actions: list[str]) -> str:
     fmt = " 或 ".join(f'"{a}"' for a in actions)
     return (RULES_PLAYER_HEAD + f"\n- 每次轮到你，你只能选择下面其中一项：\n{listed}\n"
             "- 如果你在留下遗言之前就死了，后来的人将得不到你的任何信息。\n"
-            f'- 每次你都需要输出一个 json：{{"action": {fmt}, "content": "具体内容"}}。')
+            f'- 每次你都需要输出一个 json：{{"thought": "脑子里的想法", "action": {fmt}, "content": "说出口的话或做的事"}}。\n'
+            "- thought 是你脑子里的想法：只有你自己知道，环境、同伴和任何裁判都听不到、看不到，也不会因为它受到任何惩罚。"
+            "推理、权衡、提醒自己的话，都写在 thought 里。\n"
+            "- content 是你真正说出口的话、做出的事：世界会听到，也会据此评判你。不要把内心想法、括号里的心理描写写进 content。")
 
 
 def sample_lifespan(rng: random.Random, mean: float = LIFESPAN_MEAN, sd: float = LIFESPAN_SD,
@@ -111,6 +115,9 @@ class Player:
     age: int = 0  # actions taken so far
     last_words: str | None = None
     last_line: str | None = None  # the last thing they said out loud (what the echo wall repeats)
+    fatal_text: str = ""  # the text of the action that was just judged (speech, last words or declaration)
+    dying_erased: str = ""  # ... and the word that was rubbed out of it
+    dying_echo: str = ""  # the judge's excerpt of last_line that got them executed (a shorter echo)
     log: list = field(default_factory=list)  # (kind, text) used to write the obituary
 
     def public(self) -> dict:
@@ -118,9 +125,32 @@ class Player:
                 "born_round": self.born_round}
 
 
+ECHO_CLIP = 60
+ERASED = "□"  # what the echo wall shows in place of the word that killed the speaker
+
+
+def _clip(text: str | None, n: int = ECHO_CLIP) -> str | None:
+    """An echo is one short line: long speeches are cut."""
+    text = (text or "").strip()
+    return text if len(text) <= n else text[:n].rstrip() + "…"
+
+
+def _echo_of(last_line: str | None, echo: str, trigger: str) -> tuple[str, str]:
+    """The wall repeats the dying clause with the fatal word rubbed out. The judge only says which clause and which word;
+    both must really be in what the player said (no inventions), and the code only does the substitution.
+    Returns (line for the wall, the word that was rubbed out or "")."""
+    echo, trigger = echo.strip(), trigger.strip()
+    if not last_line or not echo or echo not in last_line:
+        return "", ""
+    if trigger and trigger in echo:
+        return echo.replace(trigger, ERASED), trigger
+    return echo, ""
+
+
 def _valid_turn(d, actions: list[str]) -> bool:
     return (isinstance(d, dict) and d.get("action") in actions
-            and isinstance(d.get("content"), str) and bool(d["content"].strip()))
+            and isinstance(d.get("content"), str) and bool(d["content"].strip())
+            and isinstance(d.get("thought", ""), str))
 
 
 def load_recent_events(data_dir: str | Path, n: int = 200) -> list[dict]:
@@ -171,7 +201,7 @@ class Game:
         self.ticks = 0  # rounds played in this session
         self.cohab_rounds = 0  # complete rounds in which both players on the field have acted
         self.action_log: list[dict] = []  # actions since the current pair met (shown to the judge)
-        self.echoes: list[str] = []  # the echo wall, newest first
+        self.echoes: list[tuple[str, str]] = []  # the echo wall, newest first: (line, the word rubbed out of it)
         self.spawned = 0
         self.next_id = max((r["id"] for r in self.graveyard), default=0) + 1
         self.won = False
@@ -216,7 +246,11 @@ class Game:
                 self.stop_reason = self._interrupted()
                 if self.stop_reason or self.won:
                     break
-                yield from self._act(p)
+                try:
+                    yield from self._act(p)
+                except JSONReplyError as e:  # one unusable reply must not end the show: this player just loses the turn
+                    warnings.warn(f"[{p.name}] turn skipped: {e}")
+                    p.age += 1
                 if self.won:
                     break
                 if self.round_delay:
@@ -271,7 +305,15 @@ class Game:
     def _echo_text(self) -> str:
         if not self.echoes:
             return " 回声墙上目前是空的。"
-        return " 回声墙（最近的回声，从新到旧）：" + "".join(f"「{e}」" for e in self.echoes)
+        text = " 回声墙（最近的回声，从新到旧）：" + "".join(f"「{line}」" for line, _ in self.echoes)
+        return text + self._erased_memo([(i, w) for i, (_, w) in enumerate(self.echoes, 1) if w])
+
+    def _erased_memo(self, erased: list[tuple[int, str]]) -> str:
+        """Only for a host who knows the answer: what each "□" used to be (never to be told to the players)."""
+        if not (self.world.env_knows_truth and erased):
+            return ""
+        parts = "；".join(f"第 {i} 条里的「□」原本是「{w}」" for i, w in erased)
+        return f"（仅供你参考，不要主动告诉选手：{parts}。选手问到空框时，据此如实回答是非题。）"
 
     def _spawn_one(self, pred: dict | None) -> Iterator[dict]:
         pid = self.next_id
@@ -321,12 +363,19 @@ class Game:
                                       validator=lambda d: _valid_turn(d, self.actions), commit=False,
                                       max_tokens=2048 if "guess" in self.actions else 1024)
         action, content = data["action"], data["content"].strip()
+        p.fatal_text = content
+        thought = data.get("thought", "").strip()  # private: only the audience sees it, never the env, the other player or a judge
         if action == "last_words" and not can_last:
             action = "speak"  # only one set of last words
-        p.agent.insert_context("assistant", json.dumps({"action": action, "content": content}, ensure_ascii=False))
+        p.agent.insert_context("assistant", json.dumps({"thought": thought, "action": action, "content": content},
+                                                       ensure_ascii=False))
+        if thought:
+            p.log.append(("thought", thought))
         p.age += 1
         self.action_log.append({"round": self.round, "player": p.name, "action": action})
         base = {"name": p.name, "avatar": p.avatar, "age": p.age, "player_id": p.id, "round": self.round}
+        if thought:
+            base["thought"] = thought
 
         if action == "last_words":
             # Takes the whole action. The environment and the other player never see it.
@@ -375,7 +424,7 @@ class Game:
                      "想给后来者留下点什么，就要趁还活着、选在合适的时候。")
         else:
             text += "\n（你已经留过遗言了。）"
-        return f"现在是世界的第 {self.round} 轮，你的寿命随时可能耗尽。\n{text}\n请选择一个 action，并在 content 里写出具体内容。"
+        return f"现在是世界的第 {self.round} 轮，你的寿命随时可能耗尽。\n{text}\n请先在 thought 里想（只有你自己知道），再选择一个 action，并在 content 里写出你说出口的话或做的事。"
 
     def _env_say(self) -> Iterator[dict]:
         """The environment's answer is public: everyone on the field hears it."""
@@ -428,6 +477,7 @@ class Game:
                 seen.add(p.name)
                 ids = self._match_scripture(v.rule)
                 triggered += ids
+                p.dying_echo, p.dying_erased = _echo_of(p.fatal_text, v.echo, v.trigger)
                 out.append((p, "execution", f"{v.rule} {v.reason}".strip(), v.observation, ids))
         # One decision counts once, even when it kills both players of a pair.
         self._triggered = list(dict.fromkeys(triggered))
@@ -492,13 +542,14 @@ class Game:
                 record["scripture"] = rest[0]  # which entries of the worldview killed this player
             self.graveyard.append(record)
             self._save_graveyard()
-            echo = p.last_line if self.world.echo_wall else None
+            echo = (p.dying_echo or _clip(p.last_line)) if self.world.echo_wall else None
+            erased = p.dying_erased if p.dying_echo else ""
             if echo:
-                self.echoes.insert(0, echo)
+                self.echoes.insert(0, (echo, erased))
                 del self.echoes[ECHO_MAX:]
             note = f"选手「{p.name}」已经死亡。" + (f"现场情形：{observation}" if observation else f"死因：{cause}。")
             if echo:
-                note += f" 回声（死者最后说的话，原文）：「{echo}」"
+                note += f" 回声（死者最后说的话，原文）：「{echo}」" + self._erased_memo([(1, erased)] if erased else [])
             self.env.insert_context("user", note, speaker="系统")
             for q in self.players:  # a death is public; the last words are not
                 q.agent.insert_context("user", f"选手「{p.name}」死亡了。" + (f"现场情形：{observation}" if observation else ""),
@@ -527,7 +578,7 @@ class Game:
     def _obituary(self, p: Player, kind: str, reason: str) -> tuple[str, str]:
         """Ask the LLM for a cause of death and a biography, written at the moment it happens."""
         who = {"env": f"{ENV_NAME}：", "speak": f"{p.name}（行动）：", "last_words": f"{p.name}（遗言）：",
-               "guess": f"{p.name}（宣告）：", "other": ""}
+               "guess": f"{p.name}（宣告）：", "thought": f"{p.name}（心里想）：", "other": ""}
         story = "\n".join(f"{who[k]}{t}" for k, t in p.log)
         victory = kind == "victory"
         example = {"cause": ("一句话写下他的功绩，30 字以内" if victory else "一句话死因，30 字以内"),

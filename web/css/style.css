@@ -417,6 +417,32 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---------- 心想：选手脑子里的话，只有观众看得见。虚线、暗色、没有头像，和说出口的话区分开 ---------- */
+.avatar-gap { flex: none; width: calc(var(--av) + 8px + var(--px) * 2); height: 1px; }
+.sp-thought { margin-bottom: -8px; }
+.thought-bubble {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  margin: var(--px) 0;
+  padding: 6px 12px 8px;
+  background: rgba(10, 10, 20, .55);
+  border: 2px dashed var(--steel);
+  color: var(--mist);
+}
+.thought-bubble::after { /* 气泡尾巴：两个越来越小的方块，指向下面那位说话的人 */
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: -12px;
+  width: 6px;
+  height: 6px;
+  background: var(--steel);
+  box-shadow: 8px 8px 0 -1px var(--steel);
+}
+.thought-bubble .name { color: var(--steel); font-size: 12px; margin-bottom: 2px; }
+.thought-bubble .text { font-size: 14px; line-height: 1.6; color: var(--mist); }
+
 /* 打字机光标 */
 .msg.typing .text::after {
   content: "";
@@ -444,6 +470,7 @@ body {
   inset: 0;
   z-index: 20;
   display: grid;
+  grid-template: minmax(0, 1fr) / minmax(0, 1fr); /* 行高固定为屏幕高度；否则墓碑多了，行会被内容撑高，面板就不居中了 */
   place-items: center;
   padding:
     max(16px, env(safe-area-inset-top))
