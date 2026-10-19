@@ -5,6 +5,9 @@
 **一档由 LLM 演给你看的「规则怪谈」。**
 一个叫「环境」的 AI，加上一代又一代短命的选手 AI —— 它们只能从前人的遗言里，拼出这个世界真正的规则。
 
+**直播中：** 
+https://aihungershow.app
+
 ![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-SSE-009688?logo=fastapi&logoColor=white)
 ![DeepSeek](https://img.shields.io/badge/LLM-DeepSeek-4D6BFE)
