@@ -13,7 +13,8 @@
       <!-- 演出区（占位）：后续用 2D 像素 sprite 在这块 canvas 上演出 -->
       <section class="stage px-box" aria-label="演出区">
         <canvas id="stage-canvas" width="160" height="68"></canvas>
-        <span class="stage-tag" id="stage-tag">STAGE · 演出区</span>
+        <span class="live-badge" id="live-badge" data-state="off"><i class="dot"></i><b class="txt">LIVE</b></span>
+        <span class="stage-tag" id="stage-tag"></span>
       </section>
 
       <!-- 2×2 按钮：“墓园”会弹出墓园，其余先占位 -->

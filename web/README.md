@@ -10,7 +10,7 @@ web/
 ├─ index.html          页面骨架：演出区 + 2×2 按钮 + 对话区 + 角色页弹窗
 ├─ css/style.css       像素风样式（调色板、像素边框、响应式）
 ├─ js/sprites.js       像素图（文本位图 → SVG）：头像 p0~p7、图标、石碑、木十字架、骷髅、蜡烛
-├─ js/stage.js         演出区占位画面（canvas，自适应尺寸）
+├─ js/stage.js         演出区：选手在夜景里逛街、表情、说话、遗言、宣告、五种天罚、通关（canvas，自适应尺寸）
 ├─ js/chat.js          对话区：气泡队列、打字机、遗言气泡（墓碑形）、死亡框、入场分隔条
 ├─ js/roles.js         墓园：墓碑列表 → 人物生平（文件名沿用 roles）
 ├─ js/scripture.js     圣言：这个世界的每一条世界观 + 被触发的次数
@@ -45,7 +45,10 @@ web/
 
 - **新增选手头像**：在 `sprites.js` 的 `AVATAR_STYLES` 里加一项（`p8`…），并在后端 `game.py` 的 `AVATARS` 里加上同样的 id。
 - **改图标 / 头像**：直接改 `sprites.js` 里的字符画（12×12，每个字符一个像素，`.` 透明）。
-- **演出区**：`#stage-canvas` 铺满演出区，逻辑分辨率由 `stage.js` 的 `fitStage()` 按容器尺寸算出（整数倍放大、保持像素锐利）。`drawStage` 是占位画面，之后换成 sprite 演出。
+- **演出区**：`#stage-canvas` 铺满演出区，逻辑分辨率由 `stage.js` 的 `fitStage()` 按容器尺寸算出（整数倍放大、保持像素锐利）。
+  小人是用头像拼出来的（头 + 身体 + 腿，按姿势 × 表情 × 头像缓存）；`app.js` 在对话气泡**开始显示**的那一刻调用 `HungerStage.spawn / say / think / envSay / lastWords / declare / die / victory / reset`，所以动画和对话同步。
+  历史回放（`replay` 或 `?instant`）只还原状态（谁在场、有几块碑），不演动画。`die(record, {variant})` 的 `variant` 可以指定天罚：`spear | hands | burst | chains | rune`，不指定就随机。
+  左上角的角标由 `app.js` 的 `setMode` 控制：LIVE（红点闪烁）/ DEMO（琥珀色）/ 断线（灰色）；左下角只写轮数。
 - **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言。
 
 ## 适配

@@ -27,18 +27,24 @@
   };
 
   // ---------- 舞台标签：模式 + 当前轮数 ----------
-  let mode = '';
+  // 左上角的角标：LIVE（红点闪烁）/ DEMO（琥珀色）/ 断线（灰色）；左下角只写轮数
+  const badgeEl = document.getElementById('live-badge');
   function renderTag() {
-    tagEl.textContent = `${mode}${state.round != null ? ` · 第 ${state.round} 轮` : ''}`;
+    tagEl.textContent = state.round != null ? `第 ${state.round} 轮` : '';
   }
-  function setMode(text) { mode = text; renderTag(); }
+  function setMode(text) {
+    const kind = text === 'LIVE' ? 'live' : text === 'DEMO' ? 'demo' : 'off';
+    badgeEl.dataset.state = kind;
+    badgeEl.querySelector('.txt').textContent = kind === 'off' ? text : text;
+    renderTag();
+  }
 
   // ---------- 事件 → 画面 ----------
   // 状态（在世的人、墓园、轮数）放在 onShow 里更新，这样墓园和对话区的进度一致，不会剧透
   function handleEvent(ev) {
     const instant = INSTANT || !!ev.replay;
     const show = fn => () => {
-      if (ev.session != null && ev.session !== state.session) { state.session = ev.session; state.alive.clear(); }
+      if (ev.session != null && ev.session !== state.session) { state.session = ev.session; state.alive.clear(); HungerStage.reset(); }
       if (ev.round != null) { state.round = ev.round; renderTag(); }
       if (fn) fn();
     };
@@ -49,7 +55,8 @@
     // 选手脑子里想的（只有观众看得到）：先出一个虚线的“心想”气泡，再出他说出口的话
     const thought = e => {
       if (e.thought) {
-        HungerChat.add({ kind: 'message', who: 'player', name: e.name, avatar: e.avatar, text: e.thought, thought: true, instant }, show());
+        HungerChat.add({ kind: 'message', who: 'player', name: e.name, avatar: e.avatar, text: e.thought, thought: true, instant },
+          show(() => HungerStage.think(e.player_id, { instant })));
       }
     };
     switch (ev.type) {
@@ -58,23 +65,30 @@
         HungerChat.add({
           kind: 'divider', icon: 'heart', instant,
           text: `第 ${p.id} 位选手「${p.name}」入场${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
-        }, show(() => state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0 })));
+        }, show(() => {
+          state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0 });
+          HungerStage.spawn(p, { instant });
+        }));
         break;
       }
       case 'message':
         thought(ev);
         HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, text: ev.text, instant },
-          show(tick));
+          show(() => {
+            tick();
+            if (ev.who === 'env') HungerStage.envSay({ instant });
+            else HungerStage.say(ev.player_id, { instant, len: ev.text.length });
+          }));
         break;
       case 'lastwords':
         thought(ev);
         HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, text: ev.text,
-          ghost: true, instant }, show(tick));
+          ghost: true, instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
         break;
       case 'guess': // 宣告：向门外的存在说出还原的全部真相
         thought(ev);
         HungerChat.add({ kind: 'sacred', variant: 'guess', title: `${ev.name} 的宣告`, text: ev.text, instant },
-          show(tick));
+          show(() => { tick(); HungerStage.declare(ev.player_id, { instant }); }));
         break;
       case 'verdict': // 审判：宣告被驳回 / 通过
         HungerChat.add({
@@ -89,6 +103,7 @@
           text: `「${r.name}」完整地宣告了真相。锁已经打开，所有被困的同胞，自由了。`,
           note: ev.freed && ev.freed.length ? `同一刻获释的同伴：${ev.freed.join('、')}` : '',
         }, show(() => {
+          HungerStage.victory(r, { instant, freed: ev.freed });
           state.alive.clear();
           if (!state.live) state.demoGraveyard.push(r);
         }));
@@ -100,6 +115,7 @@
           kind: 'death', record: r, instant,
           onOpen: () => HungerRoles.open({ record: r }),
         }, show(() => {
+          HungerStage.die(r, { instant });
           state.alive.delete(r.id);
           if (!state.live) {
             state.demoGraveyard.push(r);
