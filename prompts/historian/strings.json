@@ -1,0 +1,37 @@
+{
+  "event_death": "死亡",
+  "event_victory": "完成了使命",
+  "example_death": {"cause": "一句话死因，30 字以内", "biography": "150~300 字的第三人称生平，按时间顺序"},
+  "example_victory": {"cause": "一句话写下他的功绩，30 字以内", "biography": "150~300 字的第三人称生平，按时间顺序"},
+  "personality": "性格：优点「{virtue}」、缺点「{flaw}」（让生平里的行为和这两点相呼应）\n",
+  "detail": "\n具体情况：{reason}",
+  "last_words_yes": "是——{text}",
+  "last_words_no": "没有",
+
+  "kind_text": {
+    "natural": "寿命耗尽，自然死亡",
+    "execution": "触犯了这个世界的规则，被当场处死",
+    "suicide": "主动结束了自己的生命",
+    "wrong_guess": "向世界宣告了错误或不完整的真相，被当场抹去",
+    "victory": "完整地宣告了世界的真相，赢下了这场游戏（他是胜利者，而不是死者）"
+  },
+  "suicide_reason": "主动结束了自己的生命",
+
+  "story_labels": {
+    "env": "{env}：",
+    "speak": "{name}（行动）：",
+    "last_words": "{name}（遗言）：",
+    "guess": "{name}（宣告）：",
+    "thought": "{name}（心里想）：",
+    "whisper": "{name}（悄悄话）：",
+    "other": ""
+  },
+  "story_whisper": "（悄悄对{name}说）{content}",
+  "story_heard_whisper": "{name}（悄悄话）：{content}",
+  "story_heard": "{name}：{content}",
+
+  "victory_cause": "完整地宣告了世界的真相，为场上所有人赢下了这场游戏",
+  "fallback_cause_natural": "寿数已尽，死因不明",
+  "fallback_biography": "{name}在这个世界里行动了 {age} 次。",
+  "fallback_biography_last_line": "他最后说过的话是：「{line}」"
+}

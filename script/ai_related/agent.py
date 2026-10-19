@@ -9,8 +9,7 @@ from .compress import (CompressPlan, apply_summary, apply_truncate, build_summar
                        plan_compression, render_summary)
 from .config import COMPRESS_THRESHOLD_TOKENS, DEFAULT_MODEL, KEEP_RECENT, SUMMARY_MODEL
 from .context import Context, Message
-
-NUDGE = "（请继续发言。）"
+from .prompts import DEFAULT, Prompts, fill
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
 
 
@@ -22,11 +21,11 @@ class JSONReplyError(RuntimeError):
     pass
 
 
-def _json_instruction(instruction: str, example) -> str:
-    text = f"{instruction}\n\n请只输出一个合法的 json 对象，不要输出其他文字。"
+def _json_instruction(instruction: str, example, S: dict) -> str:
+    text = f"{instruction}\n\n{S['json_only']}"
     if example is not None:
         shown = example if isinstance(example, str) else json.dumps(example, ensure_ascii=False, indent=2)
-        text += f"\njson 格式示例：\n{shown}"
+        text += "\n" + fill(S["json_example"], example=shown)
     return text
 
 
@@ -51,8 +50,9 @@ class Agent:
                  max_tokens: int | None = None, client: DeepSeekClient | None = None,
                  context: Context | None = None, auto_compress: bool = True,
                  compress_threshold: int = COMPRESS_THRESHOLD_TOKENS, keep_recent: int = KEEP_RECENT,
-                 summary_model: str = SUMMARY_MODEL, empty_retries: int = 2):
+                 summary_model: str = SUMMARY_MODEL, empty_retries: int = 2, prompts: Prompts = DEFAULT):
         self.name = name
+        self.prompts = prompts  # the engine prompts it uses itself: the json instruction, the nudge, context compression
         self.model = model
         self.thinking = thinking
         self.reasoning_effort = reasoning_effort
@@ -85,7 +85,7 @@ class Agent:
         if strategy == "truncate":
             apply_truncate(self.context, plan)
             return True
-        reply = self.client.chat(build_summary_messages(self.name, plan), model=self.summary_model,
+        reply = self.client.chat(build_summary_messages(self.name, plan, self.prompts), model=self.summary_model,
                                  json_mode=True, max_tokens=4096)
         self._finish_summary(plan, reply)
         return True
@@ -97,7 +97,7 @@ class Agent:
         if strategy == "truncate":
             apply_truncate(self.context, plan)
             return True
-        reply = await self.client.achat(build_summary_messages(self.name, plan), model=self.summary_model,
+        reply = await self.client.achat(build_summary_messages(self.name, plan, self.prompts), model=self.summary_model,
                                         json_mode=True, max_tokens=4096)
         self._finish_summary(plan, reply)
         return True
@@ -108,12 +108,12 @@ class Agent:
         return plan_compression(self.context, self.keep_recent if keep_recent is None else keep_recent)
 
     def _finish_summary(self, plan: CompressPlan, reply: Reply) -> None:
-        text = render_summary(reply.content)
+        text = render_summary(reply.content, self.prompts)
         if not text:
             warnings.warn(f"[{self.name}] empty summary from LLM, falling back to truncate")
             apply_truncate(self.context, plan)
         else:
-            apply_summary(self.context, plan, text)
+            apply_summary(self.context, plan, text, self.prompts)
 
     def _needs_compress(self) -> bool:
         return self.auto_compress and self.context.estimate_tokens() > self.compress_threshold
@@ -156,7 +156,7 @@ class Agent:
         Thinking is off by default: DeepSeek does not document JSON mode together with thinking."""
         if self._needs_compress():
             self.compress_context()
-        messages = self._messages([Message("user", _json_instruction(instruction, example))])
+        messages = self._messages([Message("user", _json_instruction(instruction, example, self.prompts.strings("agent")))])
         error: Exception | None = None
         for _ in range(retries + 1):
             reply = self.client.chat(messages, **self._chat_kwargs(thinking, max_tokens, None, None, json_mode=True))
@@ -175,7 +175,7 @@ class Agent:
                               retries: int = 2, max_tokens: int = 4096, thinking: bool = False):
         if self._needs_compress():
             await self.acompress_context()
-        messages = self._messages([Message("user", _json_instruction(instruction, example))])
+        messages = self._messages([Message("user", _json_instruction(instruction, example, self.prompts.strings("agent")))])
         error: Exception | None = None
         for _ in range(retries + 1):
             reply = await self.client.achat(messages, **self._chat_kwargs(thinking, max_tokens, None, None, json_mode=True))
@@ -202,7 +202,7 @@ class Agent:
     def _messages(self, tail: list[Message]) -> list[dict]:
         msgs = self.context.to_api_messages(tail)
         if not msgs or msgs[-1]["role"] != "user":  # the API wants the last message to be from the user
-            msgs.append({"role": "user", "content": NUDGE})
+            msgs.append({"role": "user", "content": self.prompts.strings("agent")["nudge"]})
         return msgs
 
     def _chat_kwargs(self, thinking, max_tokens, on_token, on_reasoning, json_mode: bool = False) -> dict:

@@ -10,20 +10,15 @@ from pathlib import Path
 from .agent import Agent
 from .arena import Arena
 from .client import DeepSeekClient
+from .prompts import fill, strings, text
 
 REPO = Path(__file__).resolve().parents[2]
 WORDS = REPO / "words" / "example" / "system prompt"
 MIN_PROMPT_CHARS = 30  # shorter than this = still a placeholder file
 
-DEFAULT_CONTESTANT = (
-    "你是参赛选手「{name}」，正在一档名为《AI 饥饿秀》的节目里和另一位选手对话。"
-    "你有自己的性格和目标，想在对话中占上风、让对方露出破绽。"
-    "每次只说 1-3 句话，用中文，直接说台词，不要加自己的名字前缀，不要重复自己说过的话。"
-)
-DEFAULT_ENV = (
-    "你是《AI 饥饿秀》的环境旁白。你描述场上发生的变化和突发事件，语言简短，不替选手说话，"
-    "每次不超过 3 句话。"
-)
+S = strings("arena")
+DEFAULT_CONTESTANT = text("arena/contestant")
+DEFAULT_ENV = text("arena/narrator")
 
 
 def load_prompt(path: Path, fallback: str) -> str:
@@ -43,7 +38,7 @@ def main() -> None:
     p.add_argument("--narrator-every", type=int, default=0, help="narrator speaks every N turns (0 = off)")
     p.add_argument("--budget", type=float, default=0.5, help="stop when estimated cost exceeds this (USD)")
     p.add_argument("--out", default="logs/demo", help="transcript directory")
-    p.add_argument("--opening", default="两位选手面对面坐下，节目开始了。")
+    p.add_argument("--opening", default=S["opening"])
     args = p.parse_args()
 
     client = DeepSeekClient()
@@ -51,7 +46,7 @@ def main() -> None:
     env = load_prompt(WORDS / "playground.md", DEFAULT_ENV)
 
     def make(name: str, prompt: str) -> Agent:
-        return Agent(name, prompt.replace("{name}", name) + f"\n\n你的名字是「{name}」。",
+        return Agent(name, prompt.replace("{name}", name) + "\n\n" + fill(S["your_name"], name=name),
                      model=args.model, thinking=args.thinking, client=client)
 
     a, b = make("选手A", contestant), make("选手B", contestant)

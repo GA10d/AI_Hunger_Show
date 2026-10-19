@@ -1,0 +1,5 @@
+{
+  "nudge": "（请继续发言。）",
+  "json_only": "请只输出一个合法的 json 对象，不要输出其他文字。",
+  "json_example": "json 格式示例：\n{example}"
+}

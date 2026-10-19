@@ -3,22 +3,7 @@ import json
 from dataclasses import dataclass
 
 from .context import Context, Message
-
-_SUMMARY_EXAMPLE = {
-    "events": ["发生过的关键事件，按时间顺序"],
-    "relationships": {"对方名字": "我现在怎么看他/她，关系如何"},
-    "promises": ["我做过或收到的承诺、约定、赌注"],
-    "open_threads": ["还没聊完的话题、悬而未决的冲突"],
-    "self_state": "我当前的情绪、立场和目标",
-}
-_HEADINGS = {
-    "events": "经过",
-    "relationships": "我对其他人的看法",
-    "promises": "承诺与约定",
-    "open_threads": "未了结的话题",
-    "self_state": "我当前的状态与目标",
-}
-SUMMARY_PREFIX = "【我的记忆摘要：此前的对话已被压缩，以下是我记得的内容】\n"
+from .prompts import DEFAULT, Prompts, fill
 
 
 @dataclass
@@ -43,23 +28,19 @@ def plan_compression(ctx: Context, keep_recent: int) -> CompressPlan | None:
     return CompressPlan(pinned, prev, rest[:split], rest[split:])
 
 
-def _transcript(owner: str, msgs: list[Message]) -> str:
+def _transcript(owner: str, msgs: list[Message], S: dict) -> str:
     lines = []
     for m in msgs:
-        who = f"{owner}（我）" if m.role == "assistant" else (m.speaker or "旁白")
-        lines.append(f"{who}：{m.content}")
+        who = fill(S["line_self"], owner=owner) if m.role == "assistant" else (m.speaker or S["line_narrator"])
+        lines.append(fill(S["line"], who=who, content=m.content))
     return "\n".join(lines)
 
 
-def build_summary_messages(owner: str, plan: CompressPlan) -> list[dict]:
-    system = (
-        f"你是「{owner}」的记忆整理器。请以 {owner} 的第一人称（“我”）视角，把旧摘要和新增的旧对话"
-        "合并压缩成一份新的记忆摘要：保留之后对话还用得上的事实、立场、承诺、情绪和细节，"
-        "丢掉寒暄和重复。只输出一个 json 对象，不要输出其他文字。json 格式示例：\n"
-        + json.dumps(_SUMMARY_EXAMPLE, ensure_ascii=False, indent=2)
-    )
-    prev = plan.prev_summary.content.removeprefix(SUMMARY_PREFIX) if plan.prev_summary else "（无）"
-    user = f"已有的旧摘要：\n{prev}\n\n需要并入摘要的对话：\n{_transcript(owner, plan.old)}"
+def build_summary_messages(owner: str, plan: CompressPlan, prompts: Prompts = DEFAULT) -> list[dict]:
+    S = prompts.strings("memory")
+    system = fill(prompts.text("memory/system"), owner=owner, example=json.dumps(S["example"], ensure_ascii=False, indent=2))
+    prev = plan.prev_summary.content.removeprefix(S["prefix"]) if plan.prev_summary else S["no_previous"]
+    user = fill(prompts.text("memory/request"), previous=prev, transcript=_transcript(owner, plan.old, S))
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
@@ -71,7 +52,7 @@ def _fmt(value) -> str:
     return str(value)
 
 
-def render_summary(raw: str) -> str:
+def render_summary(raw: str, prompts: Prompts = DEFAULT) -> str:
     """Turn the model's json into readable text; fall back to the raw text if it is not valid json."""
     raw = raw.strip()
     try:
@@ -80,12 +61,13 @@ def render_summary(raw: str) -> str:
         return raw
     if not isinstance(data, dict):
         return raw
-    parts = [f"## {_HEADINGS.get(k, k)}\n{_fmt(v)}" for k, v in data.items() if v]
+    headings = prompts.strings("memory")["headings"]
+    parts = [f"## {headings.get(k, k)}\n{_fmt(v)}" for k, v in data.items() if v]
     return "\n\n".join(parts)
 
 
-def apply_summary(ctx: Context, plan: CompressPlan, summary_text: str) -> None:
-    summary = Message("system", SUMMARY_PREFIX + summary_text, kind="summary")
+def apply_summary(ctx: Context, plan: CompressPlan, summary_text: str, prompts: Prompts = DEFAULT) -> None:
+    summary = Message("system", prompts.strings("memory")["prefix"] + summary_text, kind="summary")
     ctx.messages = [*plan.pinned, summary, *plan.recent]
 
 

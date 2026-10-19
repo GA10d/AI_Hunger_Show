@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 饥饿秀 · 宣传片</title>
+  <link rel="icon" href="../assets/favicon.svg">
+  <style>
+    @font-face {
+      font-family: "Fusion Pixel";
+      src: url("../assets/fonts/fusion-pixel-12px-zh_hans.woff2") format("woff2");
+    }
+    :root { --ink: #1a1c2c; --gold: #ffcd75; --red: #ff4a4a; --mist: #94b0c2; --slate: #333c57; }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: #0d0e17; color: #f4f4f4;
+      font-family: "Fusion Pixel", "Microsoft YaHei", monospace; font-size: 12px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px;
+      overflow: hidden;
+    }
+    .frame { position: relative; width: min(100vw, calc((100vh - 56px) * 16 / 9)); aspect-ratio: 16 / 9; }
+    canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; background: var(--ink); }
+    #start {
+      position: absolute; inset: 0; border: 0; cursor: pointer; background: rgba(13, 14, 23, .55);
+      font: inherit; font-size: 24px; color: var(--gold); letter-spacing: 2px;
+    }
+    #start span { padding: 12px 24px; background: var(--ink); border: 3px solid var(--gold); }
+    #start:hover span { background: var(--slate); }
+    .bar { display: flex; align-items: center; gap: 12px; width: min(100vw, calc((100vh - 56px) * 16 / 9)); padding: 0 12px; }
+    button.ctl {
+      font: inherit; font-size: 12px; color: #f4f4f4; background: var(--ink); border: 2px solid var(--mist);
+      padding: 6px 12px; cursor: pointer;
+    }
+    button.ctl:hover { border-color: var(--gold); color: var(--gold); }
+    #btn-rec { border-color: var(--red); color: var(--red); }
+    .track { flex: 1; height: 6px; background: var(--slate); }
+    #bar { height: 100%; width: 0; background: var(--gold); }
+    #time { color: var(--mist); min-width: 96px; text-align: right; }
+    body.recording .bar { opacity: .35; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <canvas id="screen" aria-label="AI 饥饿秀宣传片"></canvas>
+    <button id="start"><span>▶ 点击播放（有声）</span></button>
+  </div>
+  <div class="bar">
+    <button class="ctl" id="btn-play">▶ 播放</button>
+    <button class="ctl" id="btn-rec" title="从头播放一遍，同时把画面和声音录下来，结束后自动下载">● 录成视频</button>
+    <button class="ctl" id="btn-wav" title="把配乐单独导出成 WAV，方便放进剪辑软件">♪ 导出配乐</button>
+    <button class="ctl" id="btn-cover" title="导出一张 4:3（1920×1440）的封面 PNG">▣ 导出封面</button>
+    <div class="track"><div id="bar"></div></div>
+    <span id="time">00:00 / 01:20</span>
+  </div>
+  <script src="../js/sprites.js"></script>
+  <script src="chip.js"></script>
+  <script src="promo.js"></script>
+</body>
+</html>

@@ -9,10 +9,13 @@ from typing import Callable, Iterator
 
 from .agent import Agent, EmptyReplyError
 from .client import Usage
+from .prompts import strings
 
-NARRATE_PROMPT = "请以环境/旁白的身份，简短描述此刻场上的变化，或抛出一个新的事件，推动剧情发展。"
-NUDGE_PROMPT = "场上的对话开始重复了。请制造一个全新的变化或冲突，打破僵局，不要重复之前说过的内容。"
-CANNED_NUDGE = "（场上出现了新的变化：请换一个全新的话题，或抛出一个新的冲突，不要重复刚才说过的内容。）"
+S = strings("arena")
+NARRATE_PROMPT = S["narrate"]
+NUDGE_PROMPT = S["nudge"]
+CANNED_NUDGE = S["canned_nudge"]
+DIRECTOR = S["director"]  # who the canned nudge comes from when there is no narrator
 MAX_CONSECUTIVE_ERRORS = 3
 
 
@@ -192,8 +195,8 @@ class Arena:
     def _nudge(self) -> Event:
         if self.narrator:
             return self._say(self.narrator, "nudge", NUDGE_PROMPT)
-        self._deliver("导演", CANNED_NUDGE)
-        return self._record(Event(self.turn, "导演", CANNED_NUDGE, "nudge"))
+        self._deliver(DIRECTOR, CANNED_NUDGE)
+        return self._record(Event(self.turn, DIRECTOR, CANNED_NUDGE, "nudge"))
 
     def _record(self, event: Event) -> Event:
         self.events.append(event)

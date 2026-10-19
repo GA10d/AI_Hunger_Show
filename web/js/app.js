@@ -80,7 +80,7 @@
       }
       case 'message':
         thought(ev);
-        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, text: ev.text, instant },
+        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, text: ev.text, to: ev.to, instant },
           show(() => {
             tick();
             if (ev.who === 'env') HungerStage.envSay({ instant });
@@ -188,11 +188,36 @@
     }
   }
 
+  // 首选 SSE 推送。但有的代理会把 SSE 整个憋住不发（Cloudflare 免费的 trycloudflare 隧道就是）：
+  // 服务器一开流就先发一个 hello，几秒内没收到就改成每秒轮询 /api/poll
   function connectLive() {
+    if (/\.trycloudflare\.com$/i.test(location.hostname)) return pollLive();
     const es = new EventSource('/api/events');
-    es.onopen = () => setMode('LIVE');
+    let flowing = false;
+    es.addEventListener('hello', () => { flowing = true; setMode('LIVE'); });
     es.onerror = () => setMode('重连中…');
     es.onmessage = e => handleEvent(JSON.parse(e.data));
+    setTimeout(() => {
+      if (flowing) return;
+      es.close();
+      pollLive();
+    }, 5000);
+  }
+
+  function pollLive() {
+    const viewer = Math.random().toString(36).slice(2);
+    let after = -1;
+    (async function tick() {
+      try {
+        const data = await getJSON(`/api/poll?after=${after}&viewer=${viewer}`);
+        setMode('LIVE');
+        after = data.last;
+        data.events.forEach(handleEvent);
+      } catch (e) {
+        setMode('重连中…');
+      }
+      setTimeout(tick, 1000);
+    })();
   }
 
   async function getJSON(url) {

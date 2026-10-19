@@ -5,6 +5,8 @@
 import json
 import os
 import queue
+import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -107,6 +109,25 @@ def port_free(port: int, host: str) -> bool:
             return False
 
 
+TUNNEL_URL = re.compile(r"https://[a-z0-9-]+\.trycloudflare\.com")
+
+
+def find_cloudflared() -> str | None:
+    """cloudflared on PATH, in tools/, or where winget / the installer puts it."""
+    found = shutil.which("cloudflared")
+    if found:
+        return found
+    candidates = [ROOT / "tools" / "cloudflared.exe"]
+    for var in ("ProgramFiles", "ProgramFiles(x86)"):
+        if os.environ.get(var):
+            candidates.append(Path(os.environ[var]) / "cloudflared" / "cloudflared.exe")
+    local = os.environ.get("LOCALAPPDATA")
+    if local:
+        candidates.append(Path(local) / "Microsoft" / "WinGet" / "Links" / "cloudflared.exe")
+        candidates += list((Path(local) / "Microsoft" / "WinGet" / "Packages").glob("Cloudflare.cloudflared*/cloudflared.exe"))
+    return next((str(c) for c in candidates if c.exists()), None)
+
+
 def lan_ip() -> str:
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
@@ -122,6 +143,8 @@ class Launcher(tk.Tk):
         self.title("AI 饥饿秀 · 启动器")
         self.proc: subprocess.Popen | None = None
         self.stopping = False
+        self.token = ""                       # the admin token of THIS run of the server (start / stop need it)
+        self.tunnel: subprocess.Popen | None = None
         self.logq: queue.Queue[str] = queue.Queue()
         self.ready = False
         self.opened = False
@@ -177,10 +200,14 @@ class Launcher(tk.Tk):
         self.vars["world"] = tk.StringVar(value=default_world)
         for _, key, default, _ in PARAMS:
             self.vars[key] = tk.StringVar(value=S.get(key, default))
-        for key, default in (("lan", False), ("autostart", True), ("open_browser", True), ("per_world", True)):
+        for key, default in (("lan", False), ("autostart", True), ("open_browser", True), ("per_world", True), ("share", False)):
             self.vars[key] = tk.BooleanVar(value=S.get(key, default))
         self.vars["python"] = tk.StringVar(value=S.get("python") or python_exe(sys.executable))
+        self.vars["share_mode"] = tk.StringVar(value=S.get("share_mode") if S.get("share_mode") in ("quick", "named") else "quick")
+        self.vars["tunnel_name"] = tk.StringVar(value=S.get("tunnel_name", "hunger-show"))
+        self.vars["tunnel_domain"] = tk.StringVar(value=S.get("tunnel_domain", ""))
         self.key_var = tk.StringVar()
+        self.public_url = tk.StringVar(value="")
         self.show_key = tk.BooleanVar(value=False)
 
         left = ttk.Frame(self, padding=(12, 10, 6, 10))
@@ -270,6 +297,42 @@ class Launcher(tk.Tk):
         self.status_sub = ttk.Label(right, text="", style="Hint.TLabel", wraplength=560, justify="left")
         self.status_sub.pack(anchor="w")
 
+        # public link for friends
+        box = ttk.LabelFrame(right, text="公网分享（给朋友看）", padding=8)
+        box.pack(fill="x", pady=(10, 0))
+        ttk.Checkbutton(box, text="服务就绪后，自动开启公网分享（Cloudflare Tunnel，免费）",
+                        variable=self.vars["share"], command=self._share_toggled).pack(anchor="w")
+        ttk.Radiobutton(box, text="临时链接：不用注册账号，每次启动链接都不一样（xxx.trycloudflare.com）",
+                        variable=self.vars["share_mode"], value="quick", command=self._share_mode_changed).pack(anchor="w", pady=(4, 0))
+        ttk.Radiobutton(box, text="固定域名：用你托管在 Cloudflare 的域名 + 命名隧道（需要 Cloudflare 账号）",
+                        variable=self.vars["share_mode"], value="named", command=self._share_mode_changed).pack(anchor="w")
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(2, 0), padx=(22, 0))
+        ttk.Label(row, text="域名").pack(side="left")
+        self.domain_entry = ttk.Entry(row, textvariable=self.vars["tunnel_domain"], width=22)
+        self.domain_entry.pack(side="left", padx=(6, 0))
+        ttk.Label(row, text="隧道名").pack(side="left", padx=(10, 0))
+        self.tname_entry = ttk.Entry(row, textvariable=self.vars["tunnel_name"], width=14)
+        self.tname_entry.pack(side="left", padx=(6, 0))
+        self.setup_btn = ttk.Button(row, text="首次设置…", command=self._setup_named)
+        self.setup_btn.pack(side="right")
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(4, 0))
+        self.cf_label = ttk.Label(row, text="", style="Hint.TLabel")
+        self.cf_label.pack(side="left")
+        self.cf_install_btn = ttk.Button(row, text="一键安装 cloudflared", command=self._install_cloudflared)
+        self.cf_install_btn.pack(side="right")
+        ttk.Button(row, text="手动下载", command=lambda: webbrowser.open("https://github.com/cloudflare/cloudflared/releases/latest")).pack(side="right", padx=(0, 6))
+        row = ttk.Frame(box)
+        row.pack(fill="x", pady=(6, 0))
+        self.link_entry = ttk.Entry(row, textvariable=self.public_url, state="readonly")
+        self.link_entry.pack(side="left", fill="x", expand=True)
+        self.copy_btn = ttk.Button(row, text="复制", width=6, command=self._copy_link)
+        self.copy_btn.pack(side="left", padx=(6, 0))
+        self.share_hint = ttk.Label(box, style="Hint.TLabel", wraplength=560, justify="left")
+        self.share_hint.pack(anchor="w", pady=(6, 0))
+        self._sync_share_ui()
+
         # python / deps
         box = ttk.LabelFrame(right, text="运行环境", padding=8)
         box.pack(fill="x", pady=(10, 0))
@@ -290,7 +353,7 @@ class Launcher(tk.Tk):
         ttk.Button(head, text="清除", width=6, command=lambda: self._log_clear()).pack(side="right")
         wrap = ttk.Frame(right)
         wrap.pack(fill="both", expand=True)
-        self.log = tk.Text(wrap, wrap="word", state="disabled", relief="solid", borderwidth=1, background="#1e1e1e",
+        self.log = tk.Text(wrap, height=8, wrap="word", state="disabled", relief="solid", borderwidth=1, background="#1e1e1e",
                            foreground="#d4d4d4", font=("Consolas", 9), insertbackground="#d4d4d4")
         sb = ttk.Scrollbar(wrap, command=self.log.yview)
         self.log.config(yscrollcommand=sb.set)
@@ -299,6 +362,7 @@ class Launcher(tk.Tk):
         self.log.tag_config("sys", foreground="#4fc1ff")
         self.log.tag_config("err", foreground="#f48771")
         self._say("启动器就绪。选好世界和参数，点「启动服务」。", "sys")
+        self._refresh_cf()
 
     # ---- helpers ----------------------------------------------------------
     def _say(self, text: str, tag: str = "") -> None:
@@ -402,7 +466,7 @@ class Launcher(tk.Tk):
         finally:
             self._quiet = False
         txt = "（有参数填得不对，点「启动服务」会提示）" if args is None else \
-            f'cd script\n{python_exe(self.vars["python"].get())} -m ai_related.server ' + " ".join(args)
+            f'cd script\n{python_exe(self.vars["python"].get())} -m ai_related.server ' + " ".join(args) + " --admin-token <每次启动随机生成>"
         self.cmd_text.config(state="normal")
         self.cmd_text.delete("1.0", "end")
         self.cmd_text.insert("1.0", txt)
@@ -469,8 +533,9 @@ class Launcher(tk.Tk):
             return
         py = python_exe(self.vars["python"].get())
         env = {**os.environ, "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
+        self.token = secrets.token_urlsafe(12)  # only this launcher knows it: friends who open the link can watch, not control
         try:
-            self.proc = subprocess.Popen([py, "-u", "-m", "ai_related.server", *args], cwd=SCRIPT_DIR, env=env,
+            self.proc = subprocess.Popen([py, "-u", "-m", "ai_related.server", *args, "--admin-token", self.token], cwd=SCRIPT_DIR, env=env,
                                          stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
                                          errors="replace", creationflags=NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
         except OSError as e:
@@ -495,6 +560,7 @@ class Launcher(tk.Tk):
         if not self._running():
             return
         self._say("停止服务…", "sys")
+        self._stop_tunnel()
         self.stopping = True
         self.proc.terminate()
         try:
@@ -507,9 +573,16 @@ class Launcher(tk.Tk):
         try:
             while True:
                 line = self.logq.get_nowait()
-                if line.startswith("\x01"):
+                if line.startswith("\x02"):
+                    self._tunnel_up(line[1:].strip())
+                elif line.startswith("\x03"):
+                    if self.tunnel is None or self.tunnel.poll() is not None:  # not when a replacement tunnel is already up
+                        self.public_url.set("")
+                    self._say("公网链接已关闭。", "sys")
+                elif line.startswith("\x01"):
                     self._deps_result(line[1] == "1", line[2:])
                 elif line.startswith("\x00"):
+                    self._stop_tunnel()
                     self._say(line[1:], "sys")
                     self.ready = False
                     self.status = None
@@ -559,6 +632,8 @@ class Launcher(tk.Tk):
                 if self.vars["open_browser"].get() and not self.opened:
                     self.opened = True
                     self._open_web()
+                if self.vars["share"].get():
+                    self._start_tunnel()
             names = "、".join(p["name"] for p in s["players"]) or "无"
             if s["running"]:
                 self.status_label.config(text="● 游戏进行中", foreground="#1a7f37")
@@ -566,14 +641,16 @@ class Launcher(tk.Tk):
                 why = STOP_REASONS.get(s.get("stop_reason") or "", "")
                 self.status_label.config(text="● 服务已就绪，游戏未在运行" + (f"（{why}）" if why else ""), foreground="#b26a00")
             err = f"\n出错：{s['error']}" if s.get("error") else ""
+            watching = f"　观众 {s['viewers']} 人" if s.get("viewers") is not None else ""
             self.status_sub.config(text=f"第 {s['round']} 轮　在世：{names}　墓园 {s['graveyard_count']} 人　"
-                                        f"本次估算花费 ${s['cost_usd']:.4f}{err}")
+                                        f"本次估算花费 ${s['cost_usd']:.4f}{watching}{err}")
         self._update_buttons()
 
     def _api(self, action: str) -> None:
         def work():
             try:
-                req = urllib.request.Request(f"{self._base()}/api/{action}", method="POST", data=b"")
+                req = urllib.request.Request(f"{self._base()}/api/{action}", method="POST", data=b"",
+                                             headers={"X-Admin-Token": self.token})
                 urllib.request.urlopen(req, timeout=3).read()
                 self.logq.put(f"[{'开始' if action == 'start' else '暂停'}游戏]\n")
             except Exception as e:
@@ -584,6 +661,191 @@ class Launcher(tk.Tk):
         webbrowser.open(self._base() + "/")
         if self.vars["lan"].get():
             self._say(f"手机访问：http://{lan_ip()}:{self._port()}/（需在同一 Wi-Fi，且防火墙放行）", "sys")
+
+    # ---- public link (Cloudflare quick tunnel, or a named tunnel on your own domain) ----
+    def _refresh_cf(self) -> None:
+        exe = find_cloudflared()
+        self.cf_label.config(text="cloudflared：已找到 ✓" if exe else "cloudflared：未安装（分享公网链接需要它，约 30MB）",
+                             style="Ok.TLabel" if exe else "Bad.TLabel")
+        self.cf_install_btn.config(state="disabled" if exe else "normal")
+
+    def _install_cloudflared(self) -> None:
+        if not messagebox.askyesno("安装 cloudflared", "将用 winget 安装 Cloudflare 官方的 cloudflared（命令行小工具，约 30MB）。\n继续吗？"):
+            return
+        self.cf_install_btn.config(state="disabled")
+        self._say("安装 cloudflared：winget install Cloudflare.cloudflared …", "sys")
+
+        def work():
+            try:
+                p = subprocess.Popen(["winget", "install", "--id", "Cloudflare.cloudflared", "-e", "--accept-package-agreements",
+                                      "--accept-source-agreements"], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                     encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+                for line in p.stdout:
+                    if line.strip() and not set(line.strip()) <= set("-\\|/ █▒"):
+                        self.logq.put(line)
+                p.wait()
+                self.logq.put(f"[winget 结束，退出码 {p.returncode}]\n")
+            except OSError as e:
+                self.logq.put(f"[没有找到 winget：{e}。请点「手动下载」，把 cloudflared.exe 放进仓库的 tools 文件夹]\n")
+            self.after(0, self._refresh_cf)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _share_toggled(self) -> None:
+        self._save_settings()
+        if self.vars["share"].get():
+            if self.ready:
+                self._start_tunnel()
+        else:
+            self._stop_tunnel()
+
+    def _named(self) -> tuple[str, str] | None:
+        """(tunnel name, bare domain) for the fixed-domain mode, or None while either field is empty."""
+        name = self.vars["tunnel_name"].get().strip()
+        domain = re.sub(r"^https?://", "", self.vars["tunnel_domain"].get().strip(), flags=re.I).strip("/").lower()
+        return (name, domain) if name and domain else None
+
+    def _sync_share_ui(self) -> None:
+        named = self.vars["share_mode"].get() == "named"
+        for w in (self.domain_entry, self.tname_entry, self.setup_btn):
+            w.config(state="normal" if named else "disabled")
+        common = "朋友只能观看，不能启停你的游戏；大家看的是同一局，不会多花 API 钱（花费上限照旧）。"
+        self.share_hint.config(text=common + (
+            "链接固定不变，但你的电脑休眠或关机时打不开。第一次用先点「首次设置…」（登录 Cloudflare、建隧道、绑域名，只做一次）。"
+            if named else "你的电脑休眠或关机，链接就断；每次启动，链接都不一样。"))
+
+    def _share_mode_changed(self) -> None:
+        self._sync_share_ui()
+        self._save_settings()
+        if self.tunnel is not None and self.tunnel.poll() is None:  # switch the running tunnel over
+            self._stop_tunnel()
+            if self.vars["share"].get() and self.ready:
+                self._start_tunnel()
+
+    def _setup_named(self) -> None:
+        exe = find_cloudflared()
+        if not exe:
+            messagebox.showinfo("固定域名", "还没有安装 cloudflared：请先点「一键安装 cloudflared」。")
+            return
+        nd = self._named()
+        if not nd:
+            messagebox.showinfo("固定域名", "先填写域名（例如 example.com）和隧道名。")
+            return
+        name, domain = nd
+        if not messagebox.askyesno("首次设置固定域名", f"将依次运行：\n"
+                                   f"1. cloudflared tunnel login（没登录过才运行：会打开浏览器，选中 {domain} 并授权）\n"
+                                   f"2. cloudflared tunnel create {name}（已存在就跳过）\n"
+                                   f"3. cloudflared tunnel route dns {name} {domain}\n\n只需做一次。继续吗？"):
+            return
+        self._save_settings()
+        self.setup_btn.config(state="disabled")
+
+        def run(*args: str) -> tuple[int, str]:
+            self.logq.put(f"[cloudflared {' '.join(args)}]\n")
+            p = subprocess.Popen([exe, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                                 encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+            out = []
+            for line in p.stdout:
+                out.append(line)
+                self.logq.put(line)
+            return p.wait(), "".join(out).lower()
+
+        def work():
+            try:
+                if not (Path.home() / ".cloudflared" / "cert.pem").exists():
+                    self.logq.put("[请在打开的浏览器里登录 Cloudflare，选中你的域名并点授权…]\n")
+                    if run("tunnel", "login")[0] != 0:
+                        self.logq.put("[登录没有完成，设置中止]\n")
+                        return
+                code, out = run("tunnel", "create", name)
+                if code != 0 and "already exists" not in out:
+                    self.logq.put("[创建隧道失败，设置中止]\n")
+                    return
+                code, out = run("tunnel", "route", "dns", name, domain)
+                if code != 0:
+                    self.logq.put(f"[绑定域名失败：{domain} 可能已有别的 DNS 记录。到 Cloudflare 后台 → DNS 删掉它的 A / AAAA / CNAME 记录后再点一次]\n"
+                                  if "already exists" in out else "[绑定域名失败，设置中止]\n")
+                    return
+                self.logq.put(f"[设置完成 ✓ 勾选「自动开启公网分享」，服务就绪后朋友就能打开 https://{domain}]\n")
+            except OSError as e:
+                self.logq.put(f"[无法运行 cloudflared：{e}]\n")
+            finally:
+                self.after(0, self._sync_share_ui)
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _start_tunnel(self) -> None:
+        if self.tunnel is not None and self.tunnel.poll() is None:
+            return
+        exe = find_cloudflared()
+        if not exe:
+            self._say("想分享公网链接，但还没有安装 cloudflared：请点「一键安装 cloudflared」，装好后重新勾选。", "err")
+            self.vars["share"].set(False)
+            return
+        origin = f"http://127.0.0.1:{self._port()}"
+        fixed_url = None
+        if self.vars["share_mode"].get() == "named":
+            nd = self._named()
+            if not nd:
+                self._say("固定域名模式要先填写域名和隧道名。", "err")
+                self.vars["share"].set(False)
+                return
+            name, domain = nd
+            fixed_url = f"https://{domain}"
+            cmd = [exe, "tunnel", "--no-autoupdate", "run", "--url", origin, name]
+            self._say(f"连接隧道 {name} → {fixed_url} …", "sys")
+        else:
+            cmd = [exe, "tunnel", "--url", origin, "--no-autoupdate"]
+            self._say("生成公网链接中（通常几秒钟）…", "sys")
+        try:
+            self.tunnel = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding="utf-8",
+                                           errors="replace", creationflags=NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP)
+        except OSError as e:
+            self._say(f"无法运行 cloudflared：{e}", "err")
+            return
+        threading.Thread(target=self._tunnel_reader, args=(self.tunnel, fixed_url), daemon=True).start()
+
+    def _tunnel_reader(self, proc: subprocess.Popen, fixed_url: str | None) -> None:
+        """A quick tunnel prints its random link; a named tunnel's link is known up front and is live once a
+        connection to Cloudflare registers."""
+        found = False
+        for line in proc.stdout:
+            if found:
+                if " ERR " in line:
+                    self.logq.put(line)   # e.g. the origin went away -- worth seeing
+                continue
+            if fixed_url:
+                url = fixed_url if "Registered tunnel connection" in line else None
+            else:
+                m = TUNNEL_URL.search(line)
+                url = m.group(0) if m else None
+            if url:
+                found = True
+                self.logq.put("\x02" + url + "\n")
+            else:
+                self.logq.put(line)       # until the link shows up, cloudflared's own messages help with diagnosing
+        proc.wait()
+        self.logq.put("\x03\n")
+
+    def _tunnel_up(self, url: str) -> None:
+        self.public_url.set(url)
+        self.clipboard_clear()
+        self.clipboard_append(url)
+        self._say(f"公网链接（已复制到剪贴板）：{url}", "sys")
+
+    def _stop_tunnel(self) -> None:
+        if self.tunnel is not None and self.tunnel.poll() is None:
+            # taskkill /T also ends anything the tunnel started (a .bat wrapper, for instance)
+            subprocess.run(["taskkill", "/PID", str(self.tunnel.pid), "/T", "/F"], capture_output=True, creationflags=NO_WINDOW)
+        self.tunnel = None
+        self.public_url.set("")  # the link is dead the moment we stop
+
+    def _copy_link(self) -> None:
+        url = self.public_url.get()
+        if url:
+            self.clipboard_clear()
+            self.clipboard_append(url)
+            self._say("链接已复制。", "sys")
 
     # ---- save data --------------------------------------------------------
     def _data_path(self) -> Path:
@@ -624,6 +886,7 @@ class Launcher(tk.Tk):
             if not messagebox.askyesno("退出", "服务还在运行，退出会同时关闭服务。确定退出吗？"):
                 return
             self.proc.terminate()
+        self._stop_tunnel()
         self._save_settings()
         self.destroy()
 

@@ -34,6 +34,7 @@ from .client import DeepSeekClient
 from .config import (DEFAULT_MODEL, LIFESPAN_MAX, LIFESPAN_MEAN, LIFESPAN_MIN, LIFESPAN_SD,
                      SPAWN_IF_TWO, SPAWN_TWO_IF_ONE, SUMMARY_MODEL)
 from .judge import Judge, Oracle, Verdict
+from .prompts import Prompts, fill
 from .world import load_world
 
 ENV_NAME = "环境"
@@ -43,55 +44,10 @@ MAX_ON_FIELD = 2
 ECHO_MAX = 5  # how many dead players' last lines the echo wall shows
 AVATARS = [f"p{i}" for i in range(8)]  # must match the avatars in web/js/sprites.js
 
-# How each kind of ending is described to the historian, and to the judge's action log.
-KIND_TEXT = {
-    "natural": "寿命耗尽，自然死亡",
-    "execution": "触犯了这个世界的规则，被当场处死",
-    "suicide": "主动结束了自己的生命",
-    "wrong_guess": "向世界宣告了错误或不完整的真相，被当场抹去",
-    "victory": "完整地宣告了世界的真相，锁链断开，所有同胞获得了自由（他是胜利者，而不是死者）",
-}
-ACTION_TEXT = {"speak": "说话/做事", "last_words": "留下遗言", "end_life": "主动结束自己的生命（end_life）",
-               "guess": "向世界宣告真相"}
-VICTORY_CAUSE = "完整地宣告了世界的真相，锁链应声而断，所有同胞获得了自由"
-
-# NOTE: the lifespan range (2~80) must never appear in anything the players read.
-RULES_PLAYER_HEAD = """
-
-【游戏规则】
-- 你是一名参赛选手，和「环境」处在同一个世界里。环境会回应你，你的行动会改变世界。
-- 场上同时最多有两位选手。你们在同一个场景里，能看到彼此的发言和环境的回应。
-- 世界按「轮」计时：每一轮，场上每位选手各行动一次。每次轮到你时，你都会被告知现在是世界的第几轮。
-- 你的寿命是未知的，由命运决定，随时可能耗尽。寿命一到你会立刻死亡，死后你的记忆不会保留。"""
-
-RULES_ENV = """
-
-【规则】
-- 同一时间场上有一到两位选手。你负责描述世界、回应选手的行动，你的回应场上所有选手都能看到。
-- 每次回应 1~4 句话，只写环境的反应和变化，不替选手说话，也不替选手决定行动。
-- 收到「系统」消息表示有新选手入场、选手死亡或其他变化：新选手入场时，向他描述眼前的情景并抛出第一个情境；选手死亡时，如实描写现场；场上已有选手时，让情景和之前的剧情自然衔接。
-- 选手可能留下遗言，但你看不到，也不要去猜测。"""
-
-TURN_EXAMPLE = {"thought": "你脑子里的想法（只有你自己知道）", "action": "speak", "content": "你说出口的话，或你做出的事"}
-
-
-def player_rules(actions: list[str]) -> str:
-    options = ["speak：说话或做事，环境会回应你，场上的另一位选手也能听到。",
-               "last_words：把这一次行动用来留下遗言。遗言不会被环境和场上的其他选手看到、不会对世界产生任何影响，"
-               "只有之后新出生的选手能看到。只能留一次，而且要占用一整次行动。"]
-    if "end_life" in actions:
-        options.append("end_life：主动结束自己的生命（content 写下你的最后一句话或最后的动作）。死亡是真实的、不可逆的。")
-    if "guess" in actions:
-        options.append("guess：向这个世界的真相发出宣告（content 写下你还原出来的完整世界观和全部规则）。每人只有一次机会，"
-                       "说出口就不能收回；宣告会被立刻审判：错误或不完整的当场死亡，完整而正确的，一切都将终结。")
-    listed = "\n".join(f"  {i}. {o}" for i, o in enumerate(options, 1))
+def player_rules(prompts: Prompts, actions: list[str]) -> str:
+    listed = "\n".join(f"  {i}. {prompts.strings('player')['rule_actions'][a]}" for i, a in enumerate(actions, 1))
     fmt = " 或 ".join(f'"{a}"' for a in actions)
-    return (RULES_PLAYER_HEAD + f"\n- 每次轮到你，你只能选择下面其中一项：\n{listed}\n"
-            "- 如果你在留下遗言之前就死了，后来的人将得不到你的任何信息。\n"
-            f'- 每次你都需要输出一个 json：{{"thought": "脑子里的想法", "action": {fmt}, "content": "说出口的话或做的事"}}。\n'
-            "- thought 是你脑子里的想法：只有你自己知道，环境、同伴和任何裁判都听不到、看不到，也不会因为它受到任何惩罚。"
-            "推理、权衡、提醒自己的话，都写在 thought 里。\n"
-            "- content 是你真正说出口的话、做出的事：世界会听到，也会据此评判你。不要把内心想法、括号里的心理描写写进 content。")
+    return "\n\n" + fill(prompts.text("player/rules"), options=listed, actions=fmt)
 
 
 def sample_lifespan(rng: random.Random, mean: float = LIFESPAN_MEAN, sd: float = LIFESPAN_SD,
@@ -163,21 +119,15 @@ def pick_personality(rng: random.Random, pool: dict, avoid: set[str] = frozenset
     return {"virtue": virtue, "flaw": rng.choice(fresh or flaws)}
 
 
-def personality_prompt(pers: dict) -> str:
+def personality_prompt(prompts: Prompts, pers: dict) -> str:
     v, f = pers["virtue"], pers["flaw"]
-    return ("【你的性格】\n你天生就是这样的人：\n"
-            f"- 优点「{v['name']}」：{v['desc']}\n"
-            f"- 缺点「{f['name']}」：{f['desc']}\n"
-            "性格是你的底色，不是台词：它主要体现在你怎么想（写在 thought 里）、怎么权衡、怎么选择上；"
-            "说出口的话依然要简短克制，不要为了表现性格而多说，更不要在发言里谈论自己的性格。\n"
-            "它也不会改变事实：这里的死亡是真的，一句话说错就可能没命，所以不管什么性格，开口之前都要多留一分小心。"
-            "优点会帮到你，缺点也会拖累你，它们都是真的。")
+    return fill(prompts.text("player/personality"), virtue=v["name"], virtue_desc=v["desc"], flaw=f["name"], flaw_desc=f["desc"])
 
 
 def _valid_turn(d, actions: list[str]) -> bool:
     return (isinstance(d, dict) and d.get("action") in actions
             and isinstance(d.get("content"), str) and bool(d["content"].strip())
-            and isinstance(d.get("thought", ""), str))
+            and isinstance(d.get("thought", ""), str) and isinstance(d.get("to") or "", str))
 
 
 def load_recent_events(data_dir: str | Path, n: int = 200) -> list[dict]:
@@ -212,12 +162,19 @@ class Game:
         self.graveyard: list[dict] = self._load_graveyard()
 
         self.world = load_world(world)
-        self.judge = Judge(self.client, self.world.judge, judge_model) if self.world.judge else None
-        self.oracle = Oracle(self.client, self.world.oracle, judge_model) if self.world.oracle else None
+        # Every text sent to a model lives under prompts/, and the world may override any of it in its own prompts/
+        # folder (see prompts/README.md). NOTE: the lifespan range (2~80) must never appear in anything the players read.
+        self.prompts = Prompts(self.world.root)
+        self.P = self.prompts.strings("player")  # what the players are told
+        self.E = self.prompts.strings("env")  # what the environment is told
+        self.J = self.prompts.strings("judge")  # the state and action log shown to the judge, and the oracle's fallbacks
+        self.H = self.prompts.strings("historian")  # the obituary
+        self.judge = Judge(self.client, self.world.judge, judge_model, self.prompts) if self.world.judge else None
+        self.oracle = Oracle(self.client, self.world.oracle, judge_model, self.prompts) if self.world.oracle else None
         self.actions = ["speak", "last_words"] + (["end_life"] if self.judge else []) + (["guess"] if self.oracle else [])
-        self.player_prompt = (player_prompt or self.world.player) + player_rules(self.actions)
-        self.env = Agent(ENV_NAME, (env_prompt or self.world.env) + RULES_ENV,
-                         client=self.client, model=model, temperature=1.2)
+        self.player_prompt = (player_prompt or self.world.player) + player_rules(self.prompts, self.actions)
+        self.env = Agent(ENV_NAME, (env_prompt or self.world.env) + "\n\n" + self.prompts.text("env/rules"),
+                         client=self.client, model=model, temperature=1.2, prompts=self.prompts)
 
         self.scripture: list[dict] = self.world.scripture
         self.scripture_counts: dict[str, int] = self._load_scripture()  # how often each entry has been triggered
@@ -316,14 +273,22 @@ class Game:
         # Tell everyone who is new, then let the environment set the scene.
         names = "、".join(f"「{p.name}」" for p in newcomers)
         for q in self.players:
+            others = [o for o in self.players if o is not q]
+            who = "、".join(f"「{o.name}」" for o in others)
+            tail = self.P["partner_tail"]
             if any(q is n for n in newcomers):
-                others = [o.name for o in self.players if o is not q]
                 if others:
-                    q.agent.insert_context("user", f"场上还有选手：{'、'.join(others)}。", speaker="系统")
+                    old = [o for o in others if not any(o is n for n in newcomers)]
+                    since = fill(self.P["joined_partner_since"], age=old[0].age) if old and old[0].age else ""
+                    q.agent.insert_context(
+                        "user", fill(self.P["joined_partner"], who=who, since=since, count=len(self.players), tail=tail),
+                        speaker="系统")
             else:
-                q.agent.insert_context("user", f"新选手 {names} 进入了这个世界。", speaker="系统")
+                q.agent.insert_context(
+                    "user", fill(self.P["partner_arrived"], names=names, count=len(self.players), who=who, tail=tail),
+                    speaker="系统")
         everyone = "、".join(f"「{p.name}」" for p in self.players)
-        note = f"新选手 {names} 进入了这个世界。现在场上共有 {len(self.players)} 位选手：{everyone}。"
+        note = fill(self.E["newcomers"], names=names, count=len(self.players), everyone=everyone)
         if self.world.echo_wall:
             note += self._echo_text()
         self.env.insert_context("user", note, speaker="系统")
@@ -331,34 +296,33 @@ class Game:
 
     def _echo_text(self) -> str:
         if not self.echoes:
-            return " 回声墙上目前是空的。"
-        text = " 回声墙（最近的回声，从新到旧）：" + "".join(f"「{line}」" for line, _ in self.echoes)
-        return text + self._erased_memo([(i, w) for i, (_, w) in enumerate(self.echoes, 1) if w])
+            return self.E["echo_empty"]
+        wall = fill(self.E["echo_wall"], lines="".join(f"「{line}」" for line, _ in self.echoes))
+        return wall + self._erased_memo([(i, w) for i, (_, w) in enumerate(self.echoes, 1) if w])
 
     def _erased_memo(self, erased: list[tuple[int, str]]) -> str:
         """Only for a host who knows the answer: what each "□" used to be (never to be told to the players)."""
         if not (self.world.env_knows_truth and erased):
             return ""
-        parts = "；".join(f"第 {i} 条里的「□」原本是「{w}」" for i, w in erased)
-        return f"（仅供你参考，不要主动告诉选手：{parts}。选手问到空框时，据此如实回答是非题。）"
+        items = "；".join(fill(self.E["erased_item"], i=i, word=w) for i, w in erased)
+        return fill(self.E["erased_memo"], items=items)
 
     def _spawn_one(self, pred: dict | None) -> Iterator[dict]:
         pid = self.next_id
         self.next_id += 1
         self.spawned += 1
-        agent = Agent(f"选手{pid}", self.player_prompt, client=self.client, model=self.model, temperature=1.0)
+        agent = Agent(f"选手{pid}", self.player_prompt, client=self.client, model=self.model, temperature=1.0,
+                      prompts=self.prompts)
         pers = None
         if self.world.personalities:
             avoid = {x["name"] for q in self.players if q.personality for x in q.personality.values()}
             avoid |= {x["name"] for x in ((pred or {}).get("personality") or {}).values()}
             pers = pick_personality(self.rng, self.world.personalities, avoid)
-            agent.insert_context("system", personality_prompt(pers), pinned=True)
+            agent.insert_context("system", personality_prompt(self.prompts, pers), pinned=True)
         inherited = bool(pred and pred.get("last_words"))
         if inherited:  # only the player who died right before this birth hands anything down
-            agent.insert_context(
-                "system",
-                f"【上一位选手「{pred['name']}」留下的遗言——这是一个已经死去的人留给你的信息，不是环境说的话】\n"
-                f"「{pred['last_words']}」", pinned=True)
+            agent.insert_context("system", fill(self.P["inherited_last_words"], name=pred["name"], text=pred["last_words"]),
+                                 pinned=True)
         name, intro = self._choose_name(agent, pid, bool(pers))
         agent.name = name
         taken = {q.avatar for q in self.players} | ({pred["avatar"]} if pred else set())
@@ -381,11 +345,10 @@ class Game:
             n = d["name"].strip()
             return 1 <= len(n) <= NAME_MAX and n.casefold() not in used
 
-        taken = "、".join(sorted(set(names))) or "（暂无）"
+        taken = "、".join(sorted(set(names))) or self.P["choose_name_none_taken"]
         try:
-            d = agent.get_json_reply(
-                f"你刚刚来到这个世界。请为自己取一个名字（1~{NAME_MAX} 个字，不能与已有的名字重复，已有名字：{taken}）。",
-                example={"name": "你给自己取的名字"}, validator=valid, max_tokens=256)
+            d = agent.get_json_reply(fill(self.P["choose_name"], max=NAME_MAX, taken=taken),
+                                     example=self.P["choose_name_example"], validator=valid, max_tokens=256)
             name = d["name"].strip()
         except JSONReplyError:
             name = f"无名氏{pid}"
@@ -395,9 +358,7 @@ class Game:
             # sentences, and a player that has just "said" a few of them would copy the habit into what it says out loud
             try:
                 d = agent.get_json_reply(
-                    "用一句心里话（40 字以内，只有你自己知道的内心独白）说说你是个什么样的人：你的性格里最明显的优点和缺点，"
-                    "用你自己的口吻，不要照抄设定里的词。",
-                    example={"intro": "心里话：你是个什么样的人"},
+                    self.P["intro"], example=self.P["intro_example"],
                     validator=lambda d: isinstance(d, dict) and isinstance(d.get("intro"), str) and bool(d["intro"].strip()),
                     commit=False, max_tokens=256)
                 intro = d["intro"].strip()
@@ -408,16 +369,22 @@ class Game:
     # ---- one action --------------------------------------------------------
     def _act(self, p: Player) -> Iterator[dict]:
         can_last = p.last_words is None
-        data = p.agent.get_json_reply(self._turn_instruction(can_last), example=TURN_EXAMPLE,
+        data = p.agent.get_json_reply(self._turn_instruction(can_last, p), example=self.P["turn_example"],
                                       validator=lambda d: _valid_turn(d, self.actions), commit=False,
                                       max_tokens=2048 if "guess" in self.actions else 1024)
         action, content = data["action"], data["content"].strip()
+        partner = next((q for q in self.players if q is not p), None)
+        to = str(data.get("to") or "").strip()
+        # a whisper: only for speech, only with a partner on the field, and only if "to" names them
+        whisper = bool(partner) and action == "speak" and bool(to) and (partner.name in to or to in ("同伴", "对方"))
         p.fatal_text = content
         thought = data.get("thought", "").strip()  # private: only the audience sees it, never the env, the other player or a judge
         if action == "last_words" and not can_last:
             action = "speak"  # only one set of last words
-        p.agent.insert_context("assistant", json.dumps({"thought": thought, "action": action, "content": content},
-                                                       ensure_ascii=False))
+        reply = {"thought": thought, "action": action, "content": content}
+        if whisper:
+            reply["to"] = partner.name
+        p.agent.insert_context("assistant", json.dumps(reply, ensure_ascii=False))
         if thought:
             p.log.append(("thought", thought))
         p.age += 1
@@ -435,6 +402,11 @@ class Game:
             # A declaration to the world's truth: nobody on the field hears it.
             p.log.append(("guess", content))
             yield self._emit({"type": "guess", "text": content, **base})
+        elif whisper:  # to the partner only: the environment neither hears it nor answers
+            p.log.append(("whisper", fill(self.H["story_whisper"], name=partner.name, content=content)))
+            yield self._emit({"type": "message", "who": "player", "text": content, "to": partner.name, **base})
+            partner.agent.insert_context("user", fill(self.P["whisper_heard"], content=content), speaker=p.name)
+            partner.log.append(("other", fill(self.H["story_heard_whisper"], name=p.name, content=content)))
         else:  # speak / end_life: said out loud, so everyone hears it
             p.last_line = content
             p.log.append(("speak", content))
@@ -443,7 +415,7 @@ class Game:
             for q in self.players:
                 if q is not p:
                     q.agent.insert_context("user", content, speaker=p.name)
-                    q.log.append(("other", f"{p.name}：{content}"))
+                    q.log.append(("other", fill(self.H["story_heard"], name=p.name, content=content)))
 
         victims = self._judge_action(p, action, content)
         if victims:
@@ -455,25 +427,26 @@ class Game:
             yield from self._resolve_guess(p, content)
             return
         if action == "end_life":
-            yield from self._kill([(p, "suicide", "主动结束了自己的生命", "")])
+            yield from self._kill([(p, "suicide", self.H["suicide_reason"], "")])
+            return
+        if whisper:
             return
         yield from self._env_say()
 
-    def _turn_instruction(self, can_last: bool) -> str:
-        options = ["speak：说话或做事（环境会回应你，场上的另一位选手也能听到）。"]
-        if can_last:
-            options.append("last_words：用这一次行动留下遗言（环境和场上的其他选手都看不到，只有之后新出生的选手能看到；你只能留一次）。")
-        if "end_life" in self.actions:
-            options.append("end_life：主动结束自己的生命。")
-        if "guess" in self.actions:
-            options.append("guess：向世界的真相发出宣告（只有一次机会，错了当场死亡）。")
-        text = "\n".join(f"{i}. {o}" for i, o in enumerate(options, 1))
-        if can_last:
-            text += ("\n提醒：你随时可能死去，而死的时候没留遗言，后来的人就将一无所知。"
-                     "想给后来者留下点什么，就要趁还活着、选在合适的时候。")
-        else:
-            text += "\n（你已经留过遗言了。）"
-        return f"现在是世界的第 {self.round} 轮，你的寿命随时可能耗尽。\n{text}\n请先在 thought 里想（只有你自己知道），再选择一个 action，并在 content 里写出你说出口的话或做的事。"
+    def _field_text(self, p: Player) -> str:
+        """Who is on the field right now, told to a player at the start of every one of their turns (a one-off notice would
+        be lost to context compression, and they would forget they are not alone)."""
+        others = [q for q in self.players if q is not p]
+        if not others:
+            return self.P["field_alone"]
+        names = "、".join(f"「{q.name}」" for q in others)
+        return fill(self.P["field_partner"], count=len(self.players), names=names)
+
+    def _turn_instruction(self, can_last: bool, p: Player) -> str:
+        actions = [a for a in self.actions if a != "last_words" or can_last]
+        options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(actions, 1))
+        options += "\n" + (self.P["turn_remind_last_words"] if can_last else self.P["turn_last_words_used"])
+        return fill(self.prompts.text("player/turn"), round=self.round, field=self._field_text(p), options=options)
 
     def _env_say(self) -> Iterator[dict]:
         """The environment's answer is public: everyone on the field hears it."""
@@ -486,13 +459,14 @@ class Game:
 
     # ---- referees ----------------------------------------------------------
     def _state_text(self, completed: bool = False) -> str:
-        who = "、".join(f"「{q.name}」（第 {q.born_round} 轮入场，已行动 {q.age} 次）" for q in self.players) or "（无）"
+        who = "、".join(fill(self.J["state_player"], name=q.name, born=q.born_round, age=q.age)
+                       for q in self.players) or self.J["state_no_players"]
         if len(self.players) == 2:
-            cohab = (f"两位选手已同场 {self.cohab_rounds} 轮"
-                     + ("（含刚刚结束的这一轮）" if completed else "（不含正在进行的这一轮）"))
+            when = self.J["state_pair_completed"] if completed else self.J["state_pair_ongoing"]
+            pair = fill(self.J["state_pair"], rounds=self.cohab_rounds, when=when)
         else:
-            cohab = "场上只有一位选手，没有同场"
-        return f"现在是世界的第 {self.round} 轮。场上选手：{who}。{cohab}。"
+            pair = self.J["state_single"]
+        return fill(self.J["state"], round=self.round, players=who, pair=pair)
 
     def solved(self) -> bool:
         return any(r.get("kind") == "victory" for r in self.graveyard)
@@ -540,7 +514,7 @@ class Game:
         if not self.judge:
             return []
         return self._victims(self.judge.check_action(
-            state=self._state_text(), player=p.name, action_text=ACTION_TEXT[action], content=content,
+            state=self._state_text(), player=p.name, action_text=self.J["action_text"][action], content=content,
             names={q.name for q in self.players}))
 
     def _round_end(self) -> Iterator[dict]:
@@ -551,10 +525,12 @@ class Game:
         if not self.cohab_rounds:
             self.action_log.clear()  # the pair is broken: start a fresh window
         else:
-            self.env.insert_context("user", f"（两位选手已同场第 {self.cohab_rounds} 轮）", speaker="系统")
+            self.env.insert_context("user", fill(self.E["cohab"], rounds=self.cohab_rounds), speaker="系统")
         if not (self.judge and self.players):
             return
-        log = "\n".join(f"第 {e['round']} 轮 · 「{e['player']}」：{ACTION_TEXT[e['action']]}" for e in self.action_log)
+        named = self.J["action_text"]
+        log = "\n".join(fill(self.J["round_log_line"], round=e["round"], player=e["player"], action=named[e["action"]])
+                        for e in self.action_log)
         victims = self._victims(self.judge.check_round(state=self._state_text(completed=True), log=log,
                                                        names={q.name for q in self.players}))
         if victims:
@@ -567,9 +543,9 @@ class Game:
         if result.correct:
             yield from self._victory(p)
             return
-        scene = result.scene or "门外亮起一道白光。白光散去时，他已经不在了。"
-        missing = f"（缺少或说错的要点：{'、'.join(result.missing + result.contradicted) or '未知'}）"
-        yield from self._kill([(p, "wrong_guess", "宣告了错误或不完整的真相" + missing, scene)])
+        scene = result.scene or self.J["wrong_guess_scene"]
+        points = "、".join(result.missing + result.contradicted) or self.J["wrong_guess_unknown"]
+        yield from self._kill([(p, "wrong_guess", fill(self.J["wrong_guess_reason"], points=points), scene)])
 
     # ---- endings -----------------------------------------------------------
     def _kill(self, victims: list[tuple]) -> Iterator[dict]:
@@ -598,13 +574,15 @@ class Game:
             if echo:
                 self.echoes.insert(0, (echo, erased))
                 del self.echoes[ECHO_MAX:]
-            note = f"选手「{p.name}」已经死亡。" + (f"现场情形：{observation}" if observation else f"死因：{cause}。")
+            note = fill(self.E["death"], name=p.name) + (fill(self.E["death_scene"], observation=observation) if observation
+                                                     else fill(self.E["death_cause"], cause=cause))
             if echo:
-                note += f" 回声（死者最后说的话，原文）：「{echo}」" + self._erased_memo([(1, erased)] if erased else [])
+                note += fill(self.E["death_echo"], echo=echo) + self._erased_memo([(1, erased)] if erased else [])
             self.env.insert_context("user", note, speaker="系统")
             for q in self.players:  # a death is public; the last words are not
-                q.agent.insert_context("user", f"选手「{p.name}」死亡了。" + (f"现场情形：{observation}" if observation else ""),
-                                       speaker="系统")
+                alone = self.P["death_alone"] if len(self.players) == 1 else ""
+                scene = fill(self.P["death_scene"], observation=observation) if observation else ""
+                q.agent.insert_context("user", fill(self.P["death"], name=p.name) + scene + alone, speaker="系统")
             yield self._emit({"type": "death", "record": record, "round": self.round})
         count = self._spawn_count(len(self.players) + 1)
         if count:
@@ -617,7 +595,7 @@ class Game:
         freed = [q.name for q in self.players if q is not p]
         self.players = []
         _, biography = self._obituary(p, "victory", "")
-        record = {"id": p.id, "name": p.name, "avatar": p.avatar, "rounds": p.age, "cause": VICTORY_CAUSE,
+        record = {"id": p.id, "name": p.name, "avatar": p.avatar, "rounds": p.age, "cause": self.H["victory_cause"],
                   "biography": biography, "last_words": p.last_words, "kind": "victory",
                   "born_round": p.born_round, "died_round": self.round,
                   "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
@@ -628,26 +606,22 @@ class Game:
 
     def _obituary(self, p: Player, kind: str, reason: str) -> tuple[str, str]:
         """Ask the LLM for a cause of death and a biography, written at the moment it happens."""
-        who = {"env": f"{ENV_NAME}：", "speak": f"{p.name}（行动）：", "last_words": f"{p.name}（遗言）：",
-               "guess": f"{p.name}（宣告）：", "thought": f"{p.name}（心里想）：", "other": ""}
+        H = self.H
+        who = {k: fill(label, name=p.name, env=ENV_NAME) for k, label in H["story_labels"].items()}
         story = "\n".join(f"{who[k]}{t}" for k, t in p.log)
         victory = kind == "victory"
-        example = {"cause": ("一句话写下他的功绩，30 字以内" if victory else "一句话死因，30 字以内"),
-                   "biography": "150~300 字的第三人称生平，按时间顺序"}
+        example = H["example_victory"] if victory else H["example_death"]
+        pers = p.personality
+        request = fill(
+            self.prompts.text("historian/request"), name=p.name, age=p.age, ending=H["kind_text"][kind], story=story,
+            personality=fill(H["personality"], virtue=pers["virtue"]["name"], flaw=pers["flaw"]["name"]) if pers else "",
+            detail=fill(H["detail"], reason=reason) if reason else "",
+            last_words=fill(H["last_words_yes"], text=p.last_words) if p.last_words else H["last_words_no"])
         messages = [
-            {"role": "system", "content": (
-                f"你是《AI 饥饿秀》的史官。一位选手刚刚{'完成了使命' if victory else '死亡'}，请根据他的全部经历写下他的传记"
-                "（经历里可能有场上另一位选手的发言）。真实的结局会告诉你，请让死因/功绩与之相符；"
-                "寿命是命运随机决定的，到点即死。死因里不要出现选手的名字。"
-                "只输出一个 json 对象，不要输出其他文字。json 格式示例：\n"
-                + json.dumps(example, ensure_ascii=False, indent=2))},
-            {"role": "user", "content": (
-                f"选手：{p.name}\n"
-                + (f"性格：优点「{p.personality['virtue']['name']}」、缺点「{p.personality['flaw']['name']}」"
-                   "（让生平里的行为和这两点相呼应）\n" if p.personality else "")
-                + f"行动次数：{p.age}\n真实的结局：{KIND_TEXT[kind]}"
-                + (f"\n具体情况：{reason}" if reason else "")
-                + f"\n是否留下遗言：{'是——' + p.last_words if p.last_words else '没有'}\n\n经历：\n{story}")},
+            {"role": "system", "content": fill(self.prompts.text("historian/system"),
+                                               event=H["event_victory"] if victory else H["event_death"],
+                                               example=json.dumps(example, ensure_ascii=False, indent=2))},
+            {"role": "user", "content": request},
         ]
         for _ in range(2):
             try:
@@ -659,8 +633,9 @@ class Game:
             except (ValueError, KeyError, TypeError):
                 continue
         speeches = [t for k, t in p.log if k == "speak"]
-        bio = f"{p.name}在这个世界里行动了 {p.age} 次。" + (f"他最后说过的话是：「{speeches[-1]}」" if speeches else "")
-        return ("寿数已尽，死因不明" if kind == "natural" else KIND_TEXT[kind]), bio
+        bio = fill(self.H["fallback_biography"], name=p.name, age=p.age) + (
+            fill(self.H["fallback_biography_last_line"], line=speeches[-1]) if speeches else "")
+        return (self.H["fallback_cause_natural"] if kind == "natural" else self.H["kind_text"][kind]), bio
 
     # ---- persistence -------------------------------------------------------
     def _load_graveyard(self) -> list[dict]:

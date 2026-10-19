@@ -1,5 +1,5 @@
 /* 对话区：气泡队列（打字机效果）、分隔条，以及三种“特殊轮”的对话框。
- *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, text, ghost, instant }, onShow)
+ *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, text, ghost, to, instant }, onShow)   // to = 悄悄话的对象
  *   HungerChat.add({ kind: 'divider', icon: 'heart', text, instant }, onShow)
  *   HungerChat.add({ kind: 'persona', name, avatar, personality, instant }, onShow)   // 入场时亮出的性格卡：一个优点 + 一个缺点
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
@@ -48,7 +48,8 @@
       : '<div class="bubble px-box"><div class="name"></div><p class="text"></p></div>';
     el.innerHTML = `<div class="avatar px-box"><span class="sprite" data-sprite="${sprite}"></span></div>` + bubble;
     // 名字和台词都用 textContent：这里放的是 LLM 生成的文本，不能当 HTML 解析
-    el.querySelector('.name').textContent = item.ghost ? `† ${item.name} · 遗言 †` : item.name;
+    el.querySelector('.name').textContent = item.ghost ? `† ${item.name} · 遗言 †` : item.to ? `${item.name} → ${item.to}（悄悄话）` : item.name;
+    if (item.to) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
     Sprites.mount(el);
     return el;
   }

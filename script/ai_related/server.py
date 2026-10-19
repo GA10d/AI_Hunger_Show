@@ -1,5 +1,5 @@
-"""Web server: runs the game in a background thread, pushes events to the page over SSE,
-serves the graveyard, and hosts the static front end in web/.
+"""Web server: runs the game in a background thread, pushes events to the page over SSE (or, where a proxy
+buffers SSE -- Cloudflare quick tunnels do -- lets it poll), serves the graveyard, and hosts the front end in web/.
 
     python -m ai_related.server                # from script/, then open http://127.0.0.1:8000
 """
@@ -7,12 +7,14 @@ import argparse
 import asyncio
 import json
 import mimetypes
+import os
+import secrets
 import threading
 import time
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -23,6 +25,7 @@ from .playlist import MUSIC_DIR, write_playlist
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 BACKLOG = 200  # events replayed to a freshly connected page
+POLL_TTL = 10.0  # a polling page counts as watching for this many seconds after its last poll
 mimetypes.add_type("font/woff2", ".woff2")  # Windows' registry often has no entry for it
 
 
@@ -35,6 +38,20 @@ class Runner:
         self.lock = threading.Lock()
         self.thread: threading.Thread | None = None
         self.error: str | None = None
+        self.streams = 0  # open event streams
+        self.pollers: dict[str, float] = {}  # polling pages: viewer id -> time of its last poll
+
+    @property
+    def viewers(self) -> int:
+        """People watching right now: open streams plus pages that polled recently."""
+        cutoff = time.monotonic() - POLL_TTL
+        with self.lock:
+            self.pollers = {v: t for v, t in self.pollers.items() if t > cutoff}
+            return self.streams + len(self.pollers)
+
+    def polled(self, viewer: str) -> None:
+        with self.lock:
+            self.pollers[viewer] = time.monotonic()
 
     @property
     def running(self) -> bool:
@@ -73,15 +90,32 @@ class Runner:
             self._push({"type": "error", "message": self.error, "ts": time.time()})
 
 
-def create_app(runner: Runner) -> FastAPI:
+PROXY_HEADERS = ("x-forwarded-for", "forwarded", "x-real-ip", "cf-connecting-ip", "cf-ray")
+
+
+def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int = 100) -> FastAPI:
+    """Anyone who can reach the server may WATCH (every GET). Only the owner may start / stop the game:
+    with an admin token, the request must carry it (X-Admin-Token); without one, only a direct request from this
+    machine is accepted. A tunnel (Cloudflare, ngrok...) connects from localhost too, so its forwarding headers
+    count as "not direct" -- sharing the page through a tunnel can never hand the controls to the audience."""
     app = FastAPI(title="AI Hunger Show")
     game = runner.game
+
+    def owner_only(request: Request) -> None:
+        if admin_token:
+            if not secrets.compare_digest(request.headers.get("x-admin-token", ""), admin_token):
+                raise HTTPException(403, "admin token required")
+            return
+        direct = request.client is not None and request.client.host in ("127.0.0.1", "::1", "localhost")
+        if not direct or any(h in request.headers for h in PROXY_HEADERS):
+            raise HTTPException(403, "only the owner of this machine can start or stop the show")
 
     @app.get("/api/state")
     def state():
         return {"running": runner.running, "stop_reason": game.stop_reason, "error": runner.error,
                 "round": game.round, "players": [p.public() for p in game.players],
-                "graveyard_count": len(game.graveyard), "cost_usd": round(game.client.usage.cost_usd, 4)}
+                "graveyard_count": len(game.graveyard), "cost_usd": round(game.client.usage.cost_usd, 4),
+                "viewers": runner.viewers}
 
     @app.get("/api/graveyard")
     def graveyard():
@@ -99,41 +133,70 @@ def create_app(runner: Runner) -> FastAPI:
                 return record
         raise HTTPException(404, "no such player")
 
-    @app.post("/api/start")
+    @app.post("/api/start", dependencies=[Depends(owner_only)])
     def start():
         return {"started": runner.start()}
 
-    @app.post("/api/stop")
+    @app.post("/api/stop", dependencies=[Depends(owner_only)])
     def stop():
         runner.stop()
         return {"stopping": True}
 
+    def resume(last_seen: int) -> tuple[int, int, bool]:
+        """Where to continue for a page that last saw event `last_seen` (-1: none yet).
+        A new page, or one that saw more events than exist (the server restarted), gets the recent backlog."""
+        total = runner.count()
+        fresh = not (0 <= last_seen < total)
+        return (max(0, total - BACKLOG) if fresh else last_seen + 1), total, fresh
+
+    def mark_replay(event: dict, i: int, total: int, fresh: bool) -> dict:
+        return {**event, "replay": True} if fresh and i < total else event  # history: the page renders it instantly
+
     @app.get("/api/events")
     async def events(request: Request):
+        if runner.viewers >= max_viewers:
+            raise HTTPException(503, "too many viewers right now")
         last_id = request.headers.get("last-event-id", "")
-        total = runner.count()
-        fresh = not (last_id.isdigit() and int(last_id) < total)
-        index = max(0, total - BACKLOG) if fresh else int(last_id) + 1
+        index, total, fresh = resume(int(last_id) if last_id.isdigit() else -1)
 
         async def stream():
             nonlocal index
-            yield "retry: 2000\n\n"
-            idle = 0.0
-            while not await request.is_disconnected():
-                batch = runner.since(index)
-                for i, event in enumerate(batch, start=index):
-                    if fresh and i < total:
-                        event = {**event, "replay": True}  # history: the page renders it instantly
-                    yield f"id: {i}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
-                index += len(batch)
-                idle = 0.0 if batch else idle + 0.3
-                if idle >= 15:
-                    yield ": ping\n\n"
-                    idle = 0.0
-                await asyncio.sleep(0.3)
+            runner.streams += 1
+            try:
+                yield "retry: 2000\n\n"
+                # proves the stream really flows; behind a proxy that buffers SSE it never arrives and the page polls
+                yield "event: hello\ndata: {}\n\n"
+                idle = 0.0
+                while not await request.is_disconnected():
+                    batch = runner.since(index)
+                    for i, event in enumerate(batch, start=index):
+                        event = mark_replay(event, i, total, fresh)
+                        yield f"id: {i}\ndata: {json.dumps(event, ensure_ascii=False)}\n\n"
+                    index += len(batch)
+                    idle = 0.0 if batch else idle + 0.3
+                    if idle >= 15:
+                        yield ": ping\n\n"
+                        idle = 0.0
+                    await asyncio.sleep(0.3)
+            finally:
+                runner.streams -= 1
 
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
+
+    @app.get("/api/poll")
+    def poll(after: int = -1, viewer: str = ""):
+        """The same events as /api/events, for pages whose stream a proxy holds back.
+        `after` is the index of the last event the page has; send the reply's `last` next time."""
+        viewer = viewer[:64]
+        if viewer not in runner.pollers and runner.viewers >= max_viewers:
+            raise HTTPException(503, "too many viewers right now")
+        if viewer:
+            runner.polled(viewer)
+        index, total, fresh = resume(after)
+        batch = runner.since(index)
+        return {"events": [mark_replay(e, i, total, fresh) for i, e in enumerate(batch, start=index)],
+                "last": index + len(batch) - 1}
 
     if MUSIC_DIR.is_dir():  # the page asks for ../music/<file>, which from "/" resolves to /music/<file>
         app.mount("/music", StaticFiles(directory=MUSIC_DIR), name="music")
@@ -147,6 +210,9 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8000)
     p.add_argument("--world", default="example", help="world folder under words/ (or a path), e.g. corridor")
     p.add_argument("--data-dir", default="logs/game", help="graveyard + transcript directory")
+    p.add_argument("--admin-token", default=os.environ.get("HUNGER_ADMIN_TOKEN", ""),
+                   help="required (header X-Admin-Token) to start / stop the game; without it only direct local requests may")
+    p.add_argument("--max-viewers", type=int, default=100, help="cap on simultaneous watchers")
     p.add_argument("--no-autostart", action="store_true", help="don't start the game; POST /api/start to begin")
     p.add_argument("--delay", type=float, default=2.0, help="seconds to wait between rounds")
     p.add_argument("--budget", type=float, default=1.0, help="stop when estimated cost exceeds this (USD)")
@@ -166,7 +232,7 @@ def main() -> None:
     print(f"world: {game.world.name} (judge: {'on' if game.judge else 'off'}, oracle: {'on' if game.oracle else 'off'})")
     print(f"music: {len(write_playlist())} track(s) in {MUSIC_DIR}")
     print(f"open http://{args.host}:{args.port}  (budget ${args.budget}, data in {Path(args.data_dir).resolve()})")
-    uvicorn.run(create_app(runner), host=args.host, port=args.port, log_level="warning")
+    uvicorn.run(create_app(runner, args.admin_token or None, args.max_viewers), host=args.host, port=args.port, log_level="warning")
 
 
 if __name__ == "__main__":

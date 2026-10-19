@@ -1,0 +1,21 @@
+{
+  "example": {
+    "events": ["发生过的关键事件，按时间顺序"],
+    "relationships": {"对方名字": "我现在怎么看他/她，关系如何"},
+    "promises": ["我做过或收到的承诺、约定、赌注"],
+    "open_threads": ["还没聊完的话题、悬而未决的冲突"],
+    "self_state": "我当前的情绪、立场和目标"
+  },
+  "headings": {
+    "events": "经过",
+    "relationships": "我对其他人的看法",
+    "promises": "承诺与约定",
+    "open_threads": "未了结的话题",
+    "self_state": "我当前的状态与目标"
+  },
+  "prefix": "【我的记忆摘要：此前的对话已被压缩，以下是我记得的内容】\n",
+  "no_previous": "（无）",
+  "line": "{who}：{content}",
+  "line_self": "{owner}（我）",
+  "line_narrator": "旁白"
+}

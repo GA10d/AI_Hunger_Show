@@ -1,0 +1,18 @@
+{
+  "state": "现在是世界的第 {round} 轮。场上选手：{players}。{pair}。",
+  "state_player": "「{name}」（第 {born} 轮入场，已行动 {age} 次）",
+  "state_no_players": "（无）",
+  "state_pair": "两位选手已同场 {rounds} 轮{when}",
+  "state_pair_completed": "（含刚刚结束的这一轮）",
+  "state_pair_ongoing": "（不含正在进行的这一轮）",
+  "state_single": "场上只有一位选手，没有同场",
+
+  "action_text": {"speak": "说话/做事", "last_words": "留下遗言", "end_life": "主动结束自己的生命（end_life）", "guess": "向世界宣告真相"},
+  "round_log_line": "第 {round} 轮 · 「{player}」：{action}",
+  "round_log_empty": "（无）",
+
+  "oracle_silent": "世界没有回应。",
+  "wrong_guess_scene": "宣告落下，四下一片寂静。再看时，他已经不在了。",
+  "wrong_guess_reason": "宣告了错误或不完整的真相（缺少或说错的要点：{points}）",
+  "wrong_guess_unknown": "未知"
+}

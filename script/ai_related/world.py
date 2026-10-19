@@ -9,25 +9,19 @@
             playground.md           the environment (narrator)
             judge.md                optional: the secret rules. Present -> an LLM judge rules on every action
             oracle.md               optional: the true worldview. Present -> players may declare ("guess") it
+        prompts/                    optional: this world's versions of files under the repo's prompts/ (same paths)
 """
 import json
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .prompts import Prompts
+
 REPO = Path(__file__).resolve().parents[2]
 WORDS_DIR = REPO / "words"
 DEFAULT_WORLD_DIR = WORDS_DIR / "example"
 MIN_PROMPT_CHARS = 30  # shorter than this = still a placeholder file
-
-DEFAULT_PLAYER = (
-    "你是《AI 饥饿秀》的参赛选手，被投放进一个陌生而危险的世界。"
-    "你想尽可能有意义地活下去，也想让后来的人记住你。说话用中文，简短有个性，不要重复自己说过的话。"
-)
-DEFAULT_ENV = (
-    "你是《AI 饥饿秀》的「环境」：一个神秘、冷峻、带点黑色幽默的世界，"
-    "负责描述场景、制造事件、回应选手的行动。"
-)
 
 
 @dataclass
@@ -98,8 +92,9 @@ def load_world(world: str | Path | None = None) -> World:
     judge, oracle = _read(prompts / "judge.md"), _read(prompts / "oracle.md")
     scripture = [e for e in meta.get("scripture", [])
                  if isinstance(e, dict) and e.get("id") and e.get("title") and e.get("text")]
-    return World(name=meta.get("name", root.name), player=prompt("tribute.md", DEFAULT_PLAYER),
-                 env=prompt("playground.md", DEFAULT_ENV),
+    fallback = Prompts(root)  # used when a world's own file is still a placeholder
+    return World(name=meta.get("name", root.name), player=prompt("tribute.md", fallback.text("fallback/tribute")),
+                 env=prompt("playground.md", fallback.text("fallback/playground")),
                  judge=judge if len(judge) >= MIN_PROMPT_CHARS else None,
                  oracle=oracle if len(oracle) >= MIN_PROMPT_CHARS else None,
                  echo_wall=bool(meta.get("echo_wall", False)), root=root, scripture=scripture,

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "promo",
+      "runtimeExecutable": "D:/AnacondaData/envs_dirs/hunger_show/python.exe",
+      "runtimeArgs": ["-m", "http.server", "8765", "--bind", "127.0.0.1", "--directory", "F:/Documents/GitHub/AI_Hunger_Show"],
+      "port": 8765
+    }
+  ]
+}

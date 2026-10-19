@@ -1,0 +1,37 @@
+{
+  "rule_actions": {
+    "speak": "speak：说话或做事，环境会回应你，场上的另一位选手也能听到。",
+    "last_words": "last_words：把这一次行动用来留下遗言。遗言不会被环境和场上的其他选手看到、不会对世界产生任何影响，只有之后新出生的选手能看到。只能留一次，而且要占用一整次行动。",
+    "end_life": "end_life：主动结束自己的生命（content 写下你的最后一句话或最后的动作）。死亡是真实的、不可逆的。",
+    "guess": "guess：向这个世界的真相发出宣告（content 写下你还原出来的完整世界观和全部规则）。每人只有一次机会，说出口就不能收回；宣告会被立刻审判：错误或不完整的当场死亡，完整而正确的，一切都将终结。"
+  },
+
+  "turn_actions": {
+    "speak": "speak：说话或做事（默认环境会回应你，场上的同伴也听得到；有同伴时可以用 to 对他说悄悄话）。",
+    "last_words": "last_words：用这一次行动留下遗言（环境和场上的其他选手都看不到，只有之后新出生的选手能看到；你只能留一次）。",
+    "end_life": "end_life：主动结束自己的生命。",
+    "guess": "guess：向世界的真相发出宣告（只有一次机会，错了当场死亡）。"
+  },
+  "turn_remind_last_words": "提醒：你随时可能死去，而死的时候没留遗言，后来的人就将一无所知。想给后来者留下点什么，就要趁还活着、选在合适的时候。",
+  "turn_last_words_used": "（你已经留过遗言了。）",
+  "turn_example": {"thought": "你脑子里的想法（只有你自己知道）", "action": "speak", "content": "你说出口的话，或你做出的事", "to": "环境，或同伴的名字"},
+
+  "field_alone": "场上现在只有你一个人，没有同伴。",
+  "field_partner": "场上现在有 {count} 位选手：你和{names}。{names}是你的同伴：你们能听到彼此的发言，也可以悄悄说话（to 填他的名字，环境听不到）。想商量、提醒、交换发现，就直接对他说。",
+
+  "choose_name": "你刚刚来到这个世界。请为自己取一个名字（1~{max} 个字，不能与已有的名字重复，已有名字：{taken}）。",
+  "choose_name_none_taken": "（暂无）",
+  "choose_name_example": {"name": "你给自己取的名字"},
+  "intro": "用一句心里话（40 字以内，只有你自己知道的内心独白）说说你是个什么样的人：你的性格里最明显的优点和缺点，用你自己的口吻，不要照抄设定里的词。",
+  "intro_example": {"intro": "心里话：你是个什么样的人"},
+  "inherited_last_words": "【上一位选手「{name}」留下的遗言——这是一个已经死去的人留给你的信息，不是环境说的话】\n「{text}」",
+
+  "partner_tail": "你们能听到彼此，也可以悄悄说话（to 填他的名字，环境听不到）。",
+  "joined_partner": "场上已经有选手：{who}{since}。现在场上共 {count} 位选手：你和{who}。他是你的同伴，{tail}",
+  "joined_partner_since": "（已经行动了 {age} 次）",
+  "partner_arrived": "新选手 {names} 进入了这个世界。现在场上共 {count} 位选手：你和{who}。他是你的同伴，{tail}",
+  "whisper_heard": "（悄悄对你说）{content}",
+  "death": "选手「{name}」死亡了。",
+  "death_scene": "现场情形：{observation}",
+  "death_alone": "现在场上只剩你一个人了。"
+}

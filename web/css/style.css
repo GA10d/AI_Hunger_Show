@@ -450,6 +450,10 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* 悄悄话：只有同伴听得到——气泡换成紫色，名字后面写着对谁说 */
+.msg.whisper .bubble { --fill: #3a2a5c; }
+.msg.whisper .bubble .name { color: #e0a9ff; }
+
 /* ---------- 性格：优点绿、缺点红 ---------- */
 .chip {
   display: inline-block;

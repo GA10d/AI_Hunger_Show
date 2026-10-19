@@ -131,14 +131,23 @@ https://aihungershow.app
 
 | 行动 | 做什么 | 谁能看到 |
 |---|---|---|
-| `speak` | 说话或做事 | 环境回应；同场的另一位也能听到 |
+| `speak` | 说话或做事 | 环境回应；同场的另一位也能听到。加上 `to: 同伴的名字` 就是**悄悄话**：只有同伴听得到，环境不会回应 |
 | `last_words` | 把这一整次行动用来留遗言（只能留一次） | **谁也看不到**，只传给下一个出生的人 |
 | `end_life` | 主动结束自己的生命 | 说出口，然后死亡 |
 | `guess` | 向世界的真相宣告 | 谁也听不到，直接交给审判者 |
 
 > `end_life` 和 `guess` 只在写了对应文件的世界里开启（见下文「规则不写死在代码里」）。
 >
-> 每次行动的 JSON 是 `{"thought": 脑子里想的, "action": ..., "content": 说出口的}`。只有 `content` 会被别人听到、被裁判审查。
+> 每次行动的 JSON 是 `{"thought": 脑子里想的, "action": ..., "content": 说出口的, "to": 说给谁}`。只有 `content` 会被别人听到、被裁判审查（悄悄话也一样：在悄悄话里说禁字，照样会死）。
+
+### 两个人同场：彼此知道，也能交流
+
+- **知道对方是谁**：每一轮轮到某位选手时，他的指令里都会写明「场上现在有几位选手、同伴是谁」（只有一个人时会写「只有你一个人」）；有人入场或死亡时，场上的人也会立刻收到通知（比如「现在场上只剩你一个人了」）。
+- **互相听得到**：同伴的每句公开发言都会传给你，你的也会传给他。
+- **悄悄话**：`to` 写同伴的名字，这句话只有他听得到，**环境听不到，也不会回应**——适合商量谁去赴死、交换线索。悄悄话在聊天里是紫色的气泡，写着「甲 → 乙（悄悄话）」，观众都看得到。
+- 悄悄话依然要过裁决者，所以不能借它说禁字。
+
+<p align="center"><img src="docs/images/whisper.png" width="720" alt="悄悄话"></p>
 
 ### 一次行动是怎么走的
 
@@ -231,11 +240,12 @@ words/<world>/
 ├─ readme.md             给设计者看的说明（会剧透）
 ├─ world.json            名称、回声墙开关、环境是否知道答案、是否有性格、圣言（网页上的世界观列表）
 ├─ personalities.json    可选：这个世界自己的性格库（默认用 script/ai_related/personalities.json）
-└─ system prompt/
-   ├─ tribute.md         选手的人设和公开设定
-   ├─ playground.md      环境（叙述者）
-   ├─ judge.md           可选：隐藏规则  → 有它，才有「裁决」和 end_life
-   └─ oracle.md          可选：标准答案  → 有它，才有「宣告」和 guess
+├─ system prompt/
+│  ├─ tribute.md         选手的人设和公开设定
+│  ├─ playground.md      环境（叙述者）
+│  ├─ judge.md           可选：隐藏规则  → 有它，才有「裁决」和 end_life
+│  └─ oracle.md          可选：标准答案  → 有它，才有「宣告」和 guess
+└─ prompts/              可选：替换共用 prompt 里的某几份，路径和根目录的 prompts/ 一样（见下文）
 ```
 
 现有三个世界：
@@ -248,6 +258,9 @@ words/<world>/
   规则和设计思路在 [words/turtle/readme.md](words/turtle/readme.md)（同样会剧透）。
 
 想做自己的世界？复制一个文件夹，改几份 markdown 就行，**不用改一行代码**。
+
+所有世界共用的那一层 prompt 在 [`prompts/`](prompts/README.md)：游戏规则说明、每回合的指令、系统通知、裁判的输出格式、史官、记忆压缩等等。代码里不写死任何发给模型的文字，想调措辞、改文风，改这里的文件就行。
+只想让某个世界说法不同（比如审判者是谁、胜利时发生了什么），就在 `words/<world>/prompts/` 下按同样的路径放一份：`.md` 整份替换，`strings.json` 只写要改的键。`corridor` 和 `turtle` 就是这样换上「门外的存在」「锁链断开」这些说法的。
 
 ---
 
@@ -286,6 +299,8 @@ python -m ai_related.server --world turtle --budget 0.5          # 或 corridor�
 | `--budget` | `1.0` | 估算花费到这个数（美元）就停。**默认会一直跑到花满为止，记得设** |
 | `--delay` | `2.0` | 每轮之间的间隔（秒） |
 | `--no-autostart` | – | 先不开始，`POST /api/start` 再开始 |
+| `--admin-token` | 空 | 启停游戏需要的口令（请求头 `X-Admin-Token`）。不设时，只有**本机直接发来的**请求能启停；启动器每次会生成一个随机口令 |
+| `--max-viewers` | `100` | 同时最多多少人观看 |
 | `--max-players` / `--max-rounds` | – | 选手总数 / 总轮数上限 |
 | `--mean` / `--sd` | `41` / `15` | 寿命的均值和标准差，调小方便测试 |
 | `--data-dir` | `logs/game` | 墓园、圣言计数、对话记录存放的位置 |
@@ -297,6 +312,31 @@ python -m ai_related.run_game --world corridor --max-players 6 --mean 8 --sd 3
 ```
 
 > 💰 费用：模型默认用 `deepseek-flash`。几位只活了几轮的选手加上裁决，一共花了不到一美分。选手活得越久、上下文越长，花得越多——所以请设 `--budget`。
+
+### 📺 在自己电脑上跑，给朋友看一晚上
+
+不用买服务器：服务照常跑在你的电脑上，用 **Cloudflare Tunnel** 给它一个公网链接，朋友打开就能看（免费，不用注册账号）。
+
+**最省事：用启动器**——勾选「服务就绪后，自动开启公网分享」，点「启动服务」，链接会自动生成、复制到剪贴板，发给朋友就行。第一次用时，点一下「一键安装 cloudflared」。
+
+**想要固定域名**（例如 `https://你的域名`）：域名先托管到 Cloudflare，在启动器里选「固定域名」，填域名和隧道名，点一次「首次设置…」（它会依次运行 `cloudflared tunnel login` / `tunnel create` / `tunnel route dns`），以后勾选公网分享就会用这个域名。
+
+**或者命令行：**
+
+```bash
+# 终端 1：照常启动服务
+cd script && python -m ai_related.server --world turtle --budget 0.5
+# 终端 2：开隧道（安装：winget install Cloudflare.cloudflared）
+cloudflared tunnel --url http://127.0.0.1:8000
+# 它会打印一个 https://xxxx.trycloudflare.com ，发给朋友
+```
+
+- **朋友只能看，不能控制**：启停游戏要口令；不设口令时，隧道转发来的请求（带转发头）一律拒绝。我们用脚本测过：本机直接请求通过，带转发头的 403。
+- **大家看的是同一局**，不管多少人看，花的 API 钱都只是这一局的；`--budget` 照常兜底，花满了画面会显示「演出暂停」。
+- **你的电脑得一直开着、不休眠**（Windows：设置 → 电源，把「接通电源时，睡眠」设成「从不」），否则链接会断。
+- **临时链接每次启动都不一样**，关掉就失效；想要固定域名，见上面的「固定域名」。
+- 音乐文件是从你家里的网络传出去的（每首约 4MB，访客点了「音乐」才会加载），朋友多的话可以先把音乐关掉。
+- 启动器的状态栏会显示**现在有几位观众**。
 
 ### 按钮
 
@@ -320,12 +360,14 @@ AI_Hunger_Show/
 │  ├─ game.py                游戏机制：轮、寿命、同场人数、遗言、宣告、墓园
 │  ├─ judge.py               裁决者与审判者（两个 LLM 裁判）
 │  ├─ world.py               读取 words/<world>/
+│  ├─ prompts.py             读取 prompts/
 │  ├─ server.py              FastAPI：SSE 事件流 + REST + 托管网页和音乐
 │  ├─ run_game.py            在终端里跑
 │  └─ arena.py               最早的「两个 AI 互相对话」编排（通用，仍可用）
 ├─ launcher.pyw              图形启动器（双击 启动器.bat 打开）：选世界、填 key、调参数、看日志和状态
 ├─ web/                      前端：纯静态、无需构建，8-bit 像素风（见 web/README.md）
 ├─ words/                    世界：每个世界一个文件夹
+├─ prompts/                  所有世界共用的引擎 prompt（见 prompts/README.md）
 ├─ music/                    音乐（playlist.js 由脚本生成）
 └─ docs/images/              本页的截图
 ```

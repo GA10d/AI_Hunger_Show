@@ -1,0 +1,12 @@
+{
+  "newcomers": "新选手 {names} 进入了这个世界。现在场上共有 {count} 位选手：{everyone}。",
+  "echo_empty": " 回声墙上目前是空的。",
+  "echo_wall": " 回声墙（最近的回声，从新到旧）：{lines}",
+  "erased_item": "第 {i} 条里的「□」原本是「{word}」",
+  "erased_memo": "（仅供你参考，不要主动告诉选手：{items}。选手问到空框时，据此如实回答是非题。）",
+  "cohab": "（两位选手已同场第 {rounds} 轮）",
+  "death": "选手「{name}」已经死亡。",
+  "death_scene": "现场情形：{observation}",
+  "death_cause": "死因：{cause}。",
+  "death_echo": " 回声（死者最后说的话，原文）：「{echo}」"
+}
