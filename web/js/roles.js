@@ -48,6 +48,11 @@
     return w;
   }
 
+  // 解开回廊的人是金星；留下了遗言的人是石碑；没来得及留的是木十字架
+  function icon(r) {
+    return r.kind === 'victory' ? 'star' : r.last_words ? 'tomb' : 'cross';
+  }
+
   function meta(lines) {
     const m = el('span', 'gmeta');
     lines.filter(Boolean).forEach(t => m.append(el('span', null, t)));
@@ -58,9 +63,9 @@
     const li = el('li');
     const btn = el('button', 'grave px-box');
     btn.type = 'button';
-    // 留下了遗言的人是石碑，没来得及留的是木十字架
-    btn.append(sprite(r.last_words ? 'tomb' : 'cross', 'gtomb'), frame(r.avatar), who(r.name, r.cause),
-      meta([`存活 ${r.rounds} 轮`, r.died_round != null ? `第 ${r.died_round} 轮死亡` : '']));
+    const victory = r.kind === 'victory';
+    btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause),
+      meta([`存活 ${r.rounds} 轮`, r.died_round != null ? `第 ${r.died_round} 轮${victory ? '解开了回廊' : '死亡'}` : '']));
     btn.addEventListener('click', () => showDetail(r));
     li.append(btn);
     return li;
@@ -108,17 +113,19 @@
     backBtn.hidden = false;
     const art = el('article', 'bio');
 
+    const victory = r.kind === 'victory';
     const lines = [
       `第 ${r.id} 位选手`,
       r.born_round != null ? `第 ${r.born_round} 轮入场` : '',
-      r.died_round != null ? `第 ${r.died_round} 轮死亡` : '',
+      r.died_round != null ? `第 ${r.died_round} 轮${victory ? '解开了回廊' : '死亡'}` : '',
       `存活 ${r.rounds} 轮`,
       formatDate(r.died_at),
     ].filter(Boolean).join(' · ');
     const info = el('div', 'bio-info');
-    info.append(el('div', 'gname', r.name), el('div', 'gcause', `死因：${r.cause}`), el('div', 'gmeta', lines));
+    info.append(el('div', 'gname', r.name), el('div', 'gcause', `${victory ? '功绩' : '死因'}：${r.cause}`),
+      el('div', 'gmeta', lines));
     const head = el('div', 'bio-head');
-    head.append(sprite(r.last_words ? 'tomb' : 'cross', 'gtomb'), frame(r.avatar, 'big'), info);
+    head.append(sprite(icon(r), 'gtomb'), frame(r.avatar, 'big'), info);
 
     art.append(head,
       el('h3', null, '生平'), el('p', 'bio-text', r.biography),

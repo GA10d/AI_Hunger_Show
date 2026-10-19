@@ -28,6 +28,12 @@
     calc(100% - 8px) calc(100% - 4px), calc(100% - 8px) 100%,
     8px 100%, 8px calc(100% - 4px), 4px calc(100% - 4px), 4px calc(100% - 8px), 0 calc(100% - 8px));
 
+  /* 拱顶：五级台阶，用于宣告 / 审判的神圣对话框 */
+  --arch: polygon(0 40px, 8px 40px, 8px 32px, 16px 32px, 16px 24px, 24px 24px, 24px 16px, 32px 16px,
+    32px 8px, 40px 8px, 40px 0, calc(100% - 40px) 0, calc(100% - 40px) 8px, calc(100% - 32px) 8px,
+    calc(100% - 32px) 16px, calc(100% - 24px) 16px, calc(100% - 24px) 24px, calc(100% - 16px) 24px,
+    calc(100% - 16px) 32px, calc(100% - 8px) 32px, calc(100% - 8px) 40px, 100% 40px, 100% 100%, 0 100%);
+
   --px: 4px;     /* 一个“像素格” */
   --btn: 64px;   /* 2×2 按钮的边长 */
   --icon: 36px;  /* 按钮图标：12 格 × 3 */
@@ -272,6 +278,94 @@ body {
 .death-box .gav { --g-icon: 36px; --edge: #b13e53; flex: none; }
 .death-box .gav .sprite { filter: grayscale(1) brightness(.8); }
 
+/* ---------- 宣告 / 审判 / 获释：神圣的拱顶，金光，一个字一个字显现 ---------- */
+.sacred {
+  position: relative;
+  align-self: center;
+  width: min(100%, 680px);
+  margin: 14px 0;
+  padding: 48px 28px 26px;
+  text-align: center;
+  background: var(--gold); /* 金边 */
+  clip-path: var(--arch);
+  animation: descend .9s steps(9) both;
+}
+.sacred::before { /* 拱顶内部：从顶部洒下的金光 + 放射的光线 */
+  content: "";
+  position: absolute;
+  inset: 4px;
+  clip-path: var(--arch);
+  background:
+    radial-gradient(ellipse 60% 55% at 50% 0, rgba(255, 224, 150, .55), transparent 70%),
+    repeating-conic-gradient(from -45deg at 50% -30%, rgba(255, 255, 255, .07) 0 5deg, transparent 5deg 10deg),
+    #1d2150;
+}
+.sacred > * { position: relative; }
+.s-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 14px;
+  color: var(--gold);
+  font-size: 14px;
+  line-height: 1.4;
+  letter-spacing: .3em;
+}
+.s-head .sprite { flex: none; width: 24px; height: 24px; animation: flicker 1.4s steps(2) infinite; }
+.s-head .sprite:last-child { animation-delay: .7s; }
+.sacred .text {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.9;
+  color: #fff4d6;
+  text-shadow: 0 0 6px rgba(255, 205, 117, .85);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.sacred .note { margin: 12px 0 0; font-size: 14px; color: var(--cyan); }
+.sacred .note:empty { display: none; }
+
+/* 被驳回：金光褪成灰白，裂纹爬过拱顶 */
+.sacred.deny { background: var(--steel); animation: shatter .9s steps(12) both; }
+.sacred.deny::before {
+  background:
+    linear-gradient(112deg, transparent 49%, rgba(244, 244, 244, .2) 49.5%, transparent 50.5%),
+    linear-gradient(68deg, transparent 63%, rgba(244, 244, 244, .14) 63.5%, transparent 64.5%),
+    radial-gradient(ellipse 60% 55% at 50% 0, rgba(148, 176, 194, .35), transparent 70%),
+    #1a1d2b;
+}
+.sacred.deny .s-head { color: var(--mist); }
+.sacred.deny .s-head .sprite { filter: grayscale(1); animation: none; }
+.sacred.deny .text { color: var(--mist); text-shadow: none; }
+
+/* 通过：光芒大盛，星光闪烁 */
+.sacred.grant {
+  animation: descend .9s steps(9) both, radiance 1.6s steps(8) .9s infinite alternate;
+}
+.sacred.grant::before {
+  background:
+    radial-gradient(ellipse 70% 70% at 50% 0, rgba(255, 240, 190, .8), transparent 75%),
+    repeating-conic-gradient(from -45deg at 50% -30%, rgba(255, 255, 255, .14) 0 5deg, transparent 5deg 10deg),
+    #2a3a8a;
+}
+.sacred.grant::after { /* 星尘 */
+  content: "";
+  position: absolute;
+  inset: 4px;
+  clip-path: var(--arch);
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgba(255, 255, 255, .95) 0 1.5px, transparent 2px) 0 0 / 32px 28px,
+    radial-gradient(circle, rgba(255, 230, 160, .95) 0 1.5px, transparent 2px) 16px 14px / 32px 28px;
+  animation: twinkle 1.2s steps(2) infinite;
+}
+.sacred.grant .s-head { font-size: 16px; }
+.sacred.grant .text { font-size: 20px; }
+.sacred.freedom { padding-top: 56px; padding-bottom: 32px; }
+.sacred.freedom .s-head { font-size: 28px; letter-spacing: .5em; text-shadow: 0 0 10px rgba(255, 205, 117, .9); }
+.sacred.freedom .s-head .sprite { width: 36px; height: 36px; }
+
 /* 分隔条：入场 / 死亡 */
 .divider {
   display: flex;
@@ -465,6 +559,39 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 .bio .last-words { color: var(--mist); }
 .bio .empty { margin: 8px 0; text-align: left; }
 
+/* ---------- 圣言：每条世界观一张卡片，触发过的带金边和次数 ---------- */
+.vintro { margin: 0 var(--px) 16px; font-size: 14px; line-height: 1.6; color: var(--mist); }
+.verse-list { display: flex; flex-direction: column; gap: 16px; margin: 0; padding: 0 var(--px); list-style: none; }
+.verse {
+  --fill: #1d2150;
+  --edge: var(--steel);
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 14px;
+  align-items: start;
+  margin: 0;
+  padding: 14px 16px;
+}
+.verse.lit { --edge: var(--gold); }
+.verse .vicon { width: var(--icon); height: var(--icon); }
+.vmain { min-width: 0; }
+.vtitle { font-size: 18px; line-height: 1.4; color: var(--gold); }
+.vtext { margin: 4px 0 0; font-size: 14px; line-height: 1.7; color: var(--paper); overflow-wrap: anywhere; }
+.vcount, .vtag { font-size: 12px; line-height: 1.6; white-space: nowrap; color: var(--mist); }
+.vcount.hot { color: #e0607a; }
+.vtag { color: var(--cyan); }
+.verse.hidden { --fill: #14152a; }
+.verse.hidden .vicon { opacity: .75; }
+.verse.hidden .vtitle { color: var(--mist); letter-spacing: .3em; }
+.verse.hidden .vtext { color: var(--steel); }
+.verse.hidden .vtag { color: var(--steel); }
+
+/* ---------- 音乐开关 / 按钮闪烁 ---------- */
+.px-btn[data-action="music"]:not(.music-on) .sprite { filter: grayscale(1); opacity: .6; }
+.px-btn[data-action="music"]:not(.music-on) .label { color: var(--mist); }
+.px-btn.music-on .sprite { animation: bob .8s steps(2) infinite; }
+.px-btn.pulse { animation: pulse .6s steps(1) 4; }
+
 /* ---------- 提示 ---------- */
 .toast {
   --fill: var(--ink);
@@ -483,6 +610,23 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 @keyframes blink   { 50% { opacity: 0; } }
 @keyframes float   { 50% { transform: translateY(-6px); } }  /* 遗言的头像像幽灵一样飘 */
 @keyframes flicker { 50% { opacity: .5; } }                  /* 烛光 */
+@keyframes descend {                                         /* 宣告：从上方降下，带一点强光 */
+  0%   { transform: translateY(-28px); filter: brightness(2.2); opacity: 0; }
+  30%  { opacity: 1; }
+  100% { transform: none; filter: none; }
+}
+@keyframes shatter {                                         /* 被驳回：猛地一震，亮度骤降 */
+  0%   { transform: none; filter: brightness(2.5); }
+  20%  { transform: translateX(-10px); filter: brightness(1); }
+  40%  { transform: translateX(10px); }
+  60%  { transform: translateX(-5px) translateY(3px); }
+  80%  { transform: translateX(5px); filter: brightness(.7); }
+  100% { transform: none; filter: brightness(.85); }
+}
+@keyframes bob     { 50% { transform: translateY(-3px); } }  /* 音乐开着时，音符轻轻跳 */
+@keyframes pulse   { 50% { --edge: var(--gold); } }          /* 世界观被触发：按钮边框闪金色 */
+@keyframes radiance { to { filter: brightness(1.25); } }     /* 通过：光芒起伏 */
+@keyframes twinkle  { 50% { opacity: .15; } }                /* 星尘 */
 @keyframes doom {                                            /* 死亡框：闪白、震动、落定 */
   0%   { transform: translateX(0); filter: brightness(3) grayscale(1); opacity: 0; }
   10%  { opacity: 1; }
@@ -512,10 +656,19 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 
 /* 手机宽度（≤430px）：墓园条目的石碑和头像占两行，名字/死因在上，存活轮数在下，给文字让出宽度 */
 @media (max-width: 430px) {
+  .d-title { font-size: 16px; letter-spacing: .02em; }
+  .sacred { padding: 44px 16px 22px; }
+  .sacred .text { font-size: 16px; }
+  .sacred.grant .text { font-size: 18px; }
+  .sacred.freedom .s-head { font-size: 22px; letter-spacing: .3em; }
   .grave { grid-template-columns: auto auto 1fr; }
   .grave .gtomb, .grave .gav { grid-row: 1 / span 2; }
   .grave .who { grid-column: 3; }
   .grave .gmeta { grid-column: 3; grid-row: 2; flex-direction: row; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; }
+  /* 圣言条目：次数换到文字下面，给文字让出宽度 */
+  .verse { grid-template-columns: auto 1fr; gap: 12px; padding: 12px; }
+  .verse .vcount, .verse .vtag { grid-column: 2; }
+  .vtitle { font-size: 16px; }
 }
 
 /* 矮屏横屏（手机横过来 / 很矮的窗口）：左边演出区+按钮，右边对话，各自占满高度 */
@@ -563,6 +716,7 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box { animation: none; }
+  .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box,
+  .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse { animation: none; }
 }
-.instant .msg, .instant .divider, .instant .death-box { animation: none; }
+.instant .msg, .instant .divider, .instant .death-box, .instant .sacred { animation: none; }

@@ -21,6 +21,7 @@
     s: '#566c86', // 灰
     n: '#333c57', // 石板
     u: '#8a5a3c', // 木头棕
+    q: '#e8d5a3', // 羊皮纸
   };
 
   // 机器人头像模板：F 主色 / D 暗色 / A 点缀色，换色就能做出不同选手
@@ -88,19 +89,19 @@
     ],
 
     // —— 菜单图标 ——
-    globe: [
-      '....kkkk....',
-      '..kkbbggkk..',
-      '.kbbgggbbbk.',
-      '.kbgggbbbbk.',
-      'kbbggbbbgbbk',
-      'kbbbbbgggbbk',
-      'kbbbbbggggbk',
-      'kbggbbbgggbk',
-      '.kbgggbbbgk.',
-      '.kbbggbbbbk.',
-      '..kkbbbbkk..',
-      '....kkkk....',
+    scroll: [ // 圣言：打开的卷轴，上下各卷着一个轴
+      '..kkkkkkkk..',
+      '.kyyyyyyyyk.',
+      '..kkkkkkkk..',
+      '..kqqqqqqk..',
+      '..kquuuuqk..',
+      '..kqqqqqqk..',
+      '..kquuuuqk..',
+      '..kqqqqqqk..',
+      '..kquuuqqk..',
+      '..kkkkkkkk..',
+      '.kyyyyyyyyk.',
+      '..kkkkkkkk..',
     ],
     note: [
       '...kkkkkkkk.',
@@ -158,6 +159,34 @@
       '....kuuk....',
       '....kuuk....',
       '.kkkggggkkk.',
+      '............',
+    ],
+    star: [ // 宣告 / 胜利
+      '.....yy.....',
+      '.....yy.....',
+      '....yyyy....',
+      '...yyyyyy...',
+      'yyyyywwyyyyy',
+      'yyywwwwwwyyy',
+      'yyywwwwwwyyy',
+      'yyyyywwyyyyy',
+      '...yyyyyy...',
+      '....yyyy....',
+      '.....yy.....',
+      '.....yy.....',
+    ],
+    lock: [ // 圣言里还没有被揭示的条目
+      '....kkkk....',
+      '...kmmmmk...',
+      '..km....mk..',
+      '..km....mk..',
+      '.kkkkkkkkkk.',
+      '.kyyyyyyyyk.',
+      '.kyyykkyyyk.',
+      '.kyyykkyyyk.',
+      '.kyyykkyyyk.',
+      '.kyyyyyyyyk.',
+      '.kkkkkkkkkk.',
       '............',
     ],
     skull: [ // 死亡

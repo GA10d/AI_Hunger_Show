@@ -13,6 +13,8 @@ web/
 ├─ js/stage.js         演出区占位画面（canvas，自适应尺寸）
 ├─ js/chat.js          对话区：气泡队列、打字机、遗言气泡（墓碑形）、死亡框、入场分隔条
 ├─ js/roles.js         墓园：墓碑列表 → 人物生平（文件名沿用 roles）
+├─ js/scripture.js     圣言：这个世界的每一条世界观 + 被触发的次数
+├─ js/music.js         音乐：开关、清单循环播放（清单来自 ../music/playlist.js）
 ├─ js/demo.js          演示数据（没连后端时用）
 ├─ js/app.js           入口：把后端事件（SSE）或演示数据接到画面上
 └─ assets/             Fusion Pixel 12px 简体像素字体（OFL 协议）、favicon
@@ -21,19 +23,29 @@ web/
 ## 和后端的接口
 
 - `GET /api/events`（SSE）：事件流。刚连上时先回放最近的历史（带 `replay: true`，页面瞬间渲染），之后是实时事件。
-  `spawn`（选手入场）/ `message`（`who: env | player`）/ `lastwords`（遗言）/ `death`（带完整墓碑记录）/ `stop` / `error`。
+  `spawn`（选手入场）/ `message`（`who: env | player`）/ `lastwords`（遗言）/ `guess`（宣告）/ `verdict`（审判，`correct`）/
+  `death`（带完整墓碑记录）/ `victory`（胜利，同胞获释）/ `stop` / `error`。
   所有事件都带 `session`（后端每次启动不同，页面据此清掉上一次"在世"的人），大部分带 `round`（世界的绝对轮数，显示在舞台标签上）。
-- `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, born_round, died_round, died_at`
+- `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at`。
+  `kind`：`natural` 寿命耗尽 / `execution` 违规被处决 / `suicide` 自尽 / `wrong_guess` 宣告错误 / `victory` 胜利（墓园里显示成金星）。
+- `GET /api/scripture`：圣言。`[{id, kind: rule | truth, count, title, text}]`，`count` 是这条规则被触发的次数。
+  **还没揭示的条目没有 `title` / `text`，只有 `hidden: true`**（页面显示成「？？？」）：规则在第一次被触发时揭示，
+  世界的本质（`truth`）要等有人宣告成功（墓园里出现胜利者）才揭示。内容在后端就被拿掉了，不是前端藏起来的。
+  事件流里每次有规则生效还会推一条 `scripture` 事件（页面用它让“圣言”按钮闪一下）。
 - `GET /api/state`：在世的选手（最多两位）、当前轮数、是否在运行、已花费用。前端靠它判断后端在不在。
+- `/music/<文件>`：音乐文件（支持 Range，可以随意拖动 / 跳转）。页面里用相对路径 `../music/<文件>` 引用，
+  所以从磁盘直接打开、VSCode Live Server（以仓库根目录为根）、python 服务器三种方式都找得到。
 
-对话区的三种特殊条目（`chat.js`）：`message` + `ghost`（遗言轮）、`death`（死亡轮）、`divider`（入场/暂停）。
+对话区的特殊条目（`chat.js`）：`message` + `ghost`（遗言轮：墓碑形气泡）、`death`（死亡轮：红黑死亡框，点开生平）、
+`sacred`（宣告 / 审判 / 获释：神圣拱顶，`variant` 为 `guess` `deny` `grant` `freedom`）、`divider`（入场/暂停）。
+调试：演示数据（`js/demo.js`）里有以上全部种类，直接双击 `index.html` 就能看到。
 
 ## 常用操作
 
 - **新增选手头像**：在 `sprites.js` 的 `AVATAR_STYLES` 里加一项（`p8`…），并在后端 `game.py` 的 `AVATARS` 里加上同样的 id。
 - **改图标 / 头像**：直接改 `sprites.js` 里的字符画（12×12，每个字符一个像素，`.` 透明）。
 - **演出区**：`#stage-canvas` 铺满演出区，逻辑分辨率由 `stage.js` 的 `fitStage()` 按容器尺寸算出（整数倍放大、保持像素锐利）。`drawStage` 是占位画面，之后换成 sprite 演出。
-- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出角色页。
+- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言。
 
 ## 适配
 

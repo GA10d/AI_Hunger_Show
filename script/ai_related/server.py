@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from .client import DeepSeekClient
 from .config import LIFESPAN_MEAN, LIFESPAN_SD
 from .game import Game, load_recent_events
+from .playlist import MUSIC_DIR, write_playlist
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 BACKLOG = 200  # events replayed to a freshly connected page
@@ -86,6 +87,11 @@ def create_app(runner: Runner) -> FastAPI:
     def graveyard():
         return game.graveyard
 
+    @app.get("/api/scripture")
+    def scripture():
+        """The 圣言 page: every entry of the worldview, with how many times it has been triggered."""
+        return game.scripture_view()
+
     @app.get("/api/graveyard/{player_id}")
     def grave(player_id: int):
         for record in game.graveyard:
@@ -129,6 +135,8 @@ def create_app(runner: Runner) -> FastAPI:
         return StreamingResponse(stream(), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+    if MUSIC_DIR.is_dir():  # the page asks for ../music/<file>, which from "/" resolves to /music/<file>
+        app.mount("/music", StaticFiles(directory=MUSIC_DIR), name="music")
     app.mount("/", StaticFiles(directory=WEB_DIR, html=True), name="web")  # keep last
     return app
 
@@ -137,6 +145,7 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--world", default="example", help="world folder under words/ (or a path), e.g. corridor")
     p.add_argument("--data-dir", default="logs/game", help="graveyard + transcript directory")
     p.add_argument("--no-autostart", action="store_true", help="don't start the game; POST /api/start to begin")
     p.add_argument("--delay", type=float, default=2.0, help="seconds to wait between rounds")
@@ -148,12 +157,14 @@ def main() -> None:
     p.add_argument("--sd", type=float, default=LIFESPAN_SD, help="lifespan standard deviation, for testing")
     args = p.parse_args()
 
-    game = Game(DeepSeekClient(), data_dir=args.data_dir, seed=args.seed, lifespan_mean=args.mean,
-                lifespan_sd=args.sd, round_delay=args.delay, max_players=args.max_players,
-                max_rounds=args.max_rounds, budget_usd=args.budget)
+    game = Game(DeepSeekClient(), world=args.world, data_dir=args.data_dir, seed=args.seed,
+                lifespan_mean=args.mean, lifespan_sd=args.sd, round_delay=args.delay,
+                max_players=args.max_players, max_rounds=args.max_rounds, budget_usd=args.budget)
     runner = Runner(game)
     if not args.no_autostart:
         runner.start()
+    print(f"world: {game.world.name} (judge: {'on' if game.judge else 'off'}, oracle: {'on' if game.oracle else 'off'})")
+    print(f"music: {len(write_playlist())} track(s) in {MUSIC_DIR}")
     print(f"open http://{args.host}:{args.port}  (budget ${args.budget}, data in {Path(args.data_dir).resolve()})")
     uvicorn.run(create_app(runner), host=args.host, port=args.port, log_level="warning")
 

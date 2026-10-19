@@ -1,15 +1,20 @@
-/* 对话区：气泡队列（打字机效果）、分隔条、遗言气泡、死亡框。
+/* 对话区：气泡队列（打字机效果）、分隔条，以及三种“特殊轮”的对话框。
  *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, text, ghost, instant }, onShow)
  *   HungerChat.add({ kind: 'divider', icon: 'heart', text, instant }, onShow)
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
- * ghost = 遗言轮：墓碑形的气泡，烛光、慢速打字；
- * death = 死亡轮：红黑色的“死亡框”，出现时震一下，点击可以打开这个人的生平；
+ *   HungerChat.add({ kind: 'sacred', variant: 'guess' | 'deny' | 'grant' | 'freedom', title, text, note, instant }, onShow)
+ *   HungerChat.add({ kind: 'signal' }, onShow)   // 不显示任何东西，只在轮到它时调用 onShow
+ * ghost  = 遗言轮：墓碑形的气泡，烛光、慢速打字；
+ * death  = 死亡轮：红黑色的“死亡框”，出现时震一下，点击可以打开这个人的生平；
+ * sacred = 宣告 / 审判 / 获释：神圣的拱顶、金光、一个字一个字显现。
+ *          guess 是住客的宣告，deny 是被驳回，grant 是通过，freedom 是同胞获释的终章；
  * instant = 不用打字机效果（回放历史时用）；
  * onShow 在该条开始显示的那一刻调用，用来让“墓园/年龄/轮数”等状态和画面同步。 */
 (function (global) {
   'use strict';
 
   const MAX_ITEMS = 300; // 最多保留这么多条，防止长时间运行后页面越来越卡
+  const DEATH_TITLES = { execution: '被处决', suicide: '自尽', wrong_guess: '宣告失败', natural: '死亡' };
   const chat = document.getElementById('chat');
   const queue = [];
   let busy = false;
@@ -55,11 +60,23 @@
       '<span class="sprite skull" data-sprite="skull"></span>' +
       '<span class="d-body"><span class="d-title"></span><span class="d-cause"></span><span class="d-meta"></span></span>' +
       `<span class="gav px-box"><span class="sprite" data-sprite="${Sprites.avatar(r.avatar)}"></span></span>`;
-    el.querySelector('.d-title').textContent = `† ${r.name} 死亡 †`;
+    el.querySelector('.d-title').textContent = `† ${r.name} ${DEATH_TITLES[r.kind] || '死亡'} †`;
     el.querySelector('.d-cause').textContent = `死因：${r.cause}`;
     el.querySelector('.d-meta').textContent =
       [r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平'].filter(Boolean).join(' · ');
     if (item.onOpen) el.addEventListener('click', item.onOpen);
+    Sprites.mount(el);
+    return el;
+  }
+
+  function buildSacred(item) {
+    const el = document.createElement('article');
+    el.className = `sacred ${item.variant === 'freedom' ? 'grant freedom' : item.variant}`;
+    el.innerHTML =
+      '<div class="s-head"><span class="sprite" data-sprite="star"></span><span class="s-title"></span>' +
+      '<span class="sprite" data-sprite="star"></span></div><p class="text"></p><p class="note"></p>';
+    el.querySelector('.s-title').textContent = item.title;
+    el.querySelector('.note').textContent = item.note || '';
     Sprites.mount(el);
     return el;
   }
@@ -71,7 +88,7 @@
     if (stick) toBottom();
   }
 
-  function typeInto(el, text, instant, slow, done) {
+  function typeInto(el, text, instant, speed, done) {
     const chars = Array.from(text);
     let i = 0;
     const step = () => {
@@ -81,7 +98,7 @@
       if (stick) toBottom();
       if (i >= chars.length) return done();
       const pause = '，。！？、…,.!?'.includes(chars[i - 1]);
-      setTimeout(step, slow ? (pause ? 260 : 80) : (pause ? 160 : 32)); // 遗言一字一字慢慢刻
+      setTimeout(step, pause ? speed * (speed > 50 ? 2.5 : 5) : speed);
     };
     step();
   }
@@ -95,17 +112,25 @@
     skipTyping = false;
     if (onShow) onShow();
 
+    if (item.kind === 'signal') { // 没有画面，只在排到它的时候同步一下状态（比如让“圣言”按钮闪一下）
+      next();
+      return;
+    }
     if (item.kind === 'divider' || item.kind === 'death') {
       append(item.kind === 'death' ? buildDeath(item) : buildDivider(item));
       setTimeout(next, instant ? 0 : (item.kind === 'death' ? 1400 : 500)); // 死亡后停顿久一点
       return;
     }
-    const el = buildMessage(item);
+    const sacred = item.kind === 'sacred';
+    const el = sacred ? buildSacred(item) : buildMessage(item);
     el.classList.add('typing');
     append(el);
-    typeInto(el.querySelector('.text'), item.text, instant, !!item.ghost, () => {
+    // 遗言一字一字慢慢刻；宣告更庄重，更慢
+    const speed = sacred ? 95 : item.ghost ? 80 : 32;
+    const after = sacred ? (item.variant === 'guess' ? 1800 : 1200) : item.ghost ? 900 : 500; // 宣告之后停顿，等待审判
+    typeInto(el.querySelector('.text'), item.text, instant, speed, () => {
       el.classList.remove('typing');
-      setTimeout(next, instant ? 0 : (item.ghost ? 900 : 500));
+      setTimeout(next, instant ? 0 : after);
     });
   }
 

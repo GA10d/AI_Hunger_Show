@@ -18,11 +18,11 @@
 
       <!-- 2×2 按钮：“墓园”会弹出墓园，其余先占位 -->
       <nav class="menu" aria-label="菜单">
-        <button class="px-box px-btn" type="button" data-action="world">
-          <span class="sprite" data-sprite="globe"></span><span class="label">地球世界</span>
+        <button class="px-box px-btn" type="button" data-action="scripture">
+          <span class="sprite" data-sprite="scroll"></span><span class="label">圣言</span>
         </button>
-        <button class="px-box px-btn" type="button" data-action="music">
-          <span class="sprite" data-sprite="note"></span><span class="label">音乐</span>
+        <button class="px-box px-btn" type="button" data-action="music" aria-pressed="false">
+          <span class="sprite" data-sprite="note"></span><span class="label">音乐·关</span>
         </button>
         <button class="px-box px-btn" type="button" data-action="graveyard">
           <span class="sprite" data-sprite="tomb"></span><span class="label">墓园</span>
@@ -49,12 +49,28 @@
     </div>
   </div>
 
+  <!-- 圣言：这个世界的每一条世界观，以及它被触发过几次 -->
+  <div id="scripture" class="modal" role="dialog" aria-modal="true" aria-labelledby="scripture-title" hidden>
+    <div class="modal-panel px-box">
+      <header class="modal-head">
+        <h2 id="scripture-title">圣言</h2>
+        <button class="px-box px-btn px-btn-s" id="scripture-close" type="button">关闭</button>
+      </header>
+      <div class="modal-body" id="scripture-body"></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast px-box" role="status" hidden></div>
 
+  <!-- 音乐清单（由 python -m ai_related.playlist 生成；服务器每次启动都会重写）。用相对路径，
+       双击打开、Live Server、python 服务器三种方式都能找到 -->
+  <script src="../music/playlist.js"></script>
   <script src="js/sprites.js"></script>
   <script src="js/stage.js"></script>
   <script src="js/chat.js"></script>
   <script src="js/roles.js"></script>
+  <script src="js/scripture.js"></script>
+  <script src="js/music.js"></script>
   <script src="js/demo.js"></script>
   <script src="js/app.js"></script>
 </body>
