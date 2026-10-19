@@ -81,9 +81,20 @@
 
 **触发圣言而死**（被裁决者处决）时，有五种天罚，**每次随机抽一种**：
 
-<p align="center"><img src="docs/images/stage-executions.png" width="860" alt="五种天罚"></p>
+<p align="center"><img src="docs/images/stage-executions.gif" width="420" alt="五种天罚（动图）"><br><sub>依次是：神矛 · 血手 · 爆裂 · 锁链 · 血色法阵</sub></p>
 
 死后原地留下一块**石碑**（留了遗言）或**木十字架**（没来得及），舞台上保留最近的三块。宣告失败是另一种死法：白光吞没，碎成像素升上夜空。
+
+### 🎭 性格：每个选手出生时抽一个优点 + 一个缺点
+
+选手入场时，对话区会亮出他的**性格卡**——一个优点（绿）、一个缺点（红），随后他自己用一句心里话说说自己是个什么样的人。性格也会真的写进他的设定里，影响他怎么想、怎么权衡、怎么选择：勇敢的人敢试，胆小的人磨蹭；善良的愿意为同伴牺牲，自私的不愿意；话痨管不住嘴，在这个世界里是要命的。
+
+<p align="center"><img src="docs/images/persona.png" width="720" alt="性格卡"></p>
+
+- 一共 10 个优点、12 个缺点；**自相矛盾的组合不会被抽到**（不会有「勇敢的胆小鬼」「乐观的悲观者」）；同场的两位尽量不重样。
+- 性格显示在墓园的每一块碑旁，也写进史官的提示词，让生平里的行为和它相呼应。
+- 性格库在 [`script/ai_related/personalities.json`](script/ai_related/personalities.json)；某个世界想要自己的，在 `words/<world>/` 放一份同样格式的 `personalities.json`；`world.json` 里写 `"personality": false` 就关掉。
+- 性格被写成「底色，不是台词」：它体现在 `thought` 和选择里，说出口的话仍然要简短克制。（我们试过更强的写法，结果选手开始「演角色」，第一轮就死的比例从 29% 涨到了 78%。）
 
 ### 💭 心想：脑子里的话，只有观众听得见
 
@@ -215,7 +226,8 @@ flowchart LR
 ```
 words/<world>/
 ├─ readme.md             给设计者看的说明（会剧透）
-├─ world.json            名称、回声墙开关、环境是否知道答案、圣言（网页上的世界观列表）
+├─ world.json            名称、回声墙开关、环境是否知道答案、是否有性格、圣言（网页上的世界观列表）
+├─ personalities.json    可选：这个世界自己的性格库（默认用 script/ai_related/personalities.json）
 └─ system prompt/
    ├─ tribute.md         选手的人设和公开设定
    ├─ playground.md      环境（叙述者）

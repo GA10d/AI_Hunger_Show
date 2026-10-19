@@ -42,9 +42,20 @@
     return isNaN(d) ? '' : d.toLocaleString('zh-CN', { hour12: false });
   }
 
-  function who(name, line) {
+  // 性格：绿色的优点、红色的缺点
+  function chips(pers) {
+    const c = el('span', 'chips');
+    if (!pers) return c;
+    const v = el('span', 'chip good', pers.virtue.name), f = el('span', 'chip bad', pers.flaw.name);
+    v.title = pers.virtue.tip || ''; f.title = pers.flaw.tip || '';
+    c.append(v, f);
+    return c;
+  }
+
+  function who(name, line, pers) {
     const w = el('span', 'who');
     w.append(el('span', 'gname', name), el('span', 'gcause', line));
+    if (pers) w.append(chips(pers));
     return w;
   }
 
@@ -64,7 +75,7 @@
     const btn = el('button', 'grave px-box');
     btn.type = 'button';
     const victory = r.kind === 'victory';
-    btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause),
+    btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause, r.personality),
       meta([`存活 ${r.rounds} 轮`, r.died_round != null ? `第 ${r.died_round} 轮${victory ? '解开了回廊' : '死亡'}` : '']));
     btn.addEventListener('click', () => showDetail(r));
     li.append(btn);
@@ -74,7 +85,7 @@
   function aliveItem(p) {
     const li = el('li');
     const card = el('div', 'grave alive px-box');
-    card.append(sprite('heart', 'gtomb'), frame(p.avatar), who(p.name, '在世，还没有墓碑'),
+    card.append(sprite('heart', 'gtomb'), frame(p.avatar), who(p.name, '在世，还没有墓碑', p.personality),
       meta([`已存活 ${p.age} 轮`]));
     li.append(card);
     return li;
@@ -124,10 +135,17 @@
     const info = el('div', 'bio-info');
     info.append(el('div', 'gname', r.name), el('div', 'gcause', `${victory ? '功绩' : '死因'}：${r.cause}`),
       el('div', 'gmeta', lines));
+    if (r.personality) info.append(chips(r.personality));
     const head = el('div', 'bio-head');
     head.append(sprite(icon(r), 'gtomb'), frame(r.avatar, 'big'), info);
 
-    art.append(head,
+    const traits = [];
+    if (r.personality) {
+      const { virtue, flaw } = r.personality;
+      const row = (cls, label, t) => { const p = el('p', 'trait'); p.append(el('span', `chip ${cls}`, `${label} · ${t.name}`), el('span', 'p-tip', t.tip || '')); return p; };
+      traits.push(el('h3', null, '性格'), row('good', '优点', virtue), row('bad', '缺点', flaw));
+    }
+    art.append(head, ...traits,
       el('h3', null, '生平'), el('p', 'bio-text', r.biography),
       el('h3', null, '遗言'),
       r.last_words ? el('p', 'last-words', `「${r.last_words}」`) : el('p', 'empty', '没来得及留下遗言。'));

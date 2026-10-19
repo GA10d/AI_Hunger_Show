@@ -450,6 +450,39 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---------- 性格：优点绿、缺点红 ---------- */
+.chip {
+  display: inline-block;
+  flex: none;
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: normal;
+  line-height: 18px;
+  white-space: nowrap;
+  color: var(--ink);
+}
+.chip.good { background: #a7f070; }
+.chip.bad { background: #e0607a; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+.persona {
+  --fill: var(--ink);
+  --edge: var(--accent);
+  align-self: center;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(100%, 460px);
+  margin: var(--px) auto;
+  padding: 10px 14px;
+  animation: pop .24s steps(3) both;
+}
+.persona .gav { --g-icon: 36px; --edge: var(--accent); flex: none; }
+.p-body { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.p-title { color: var(--accent); font-size: 13px; line-height: 1.4; }
+.p-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.p-tip { color: var(--mist); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.bio .trait { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
+
 /* ---------- 心想：选手脑子里的话，只有观众看得见。虚线、暗色、没有头像，和说出口的话区分开 ---------- */
 .avatar-gap { flex: none; width: calc(var(--av) + 8px + var(--px) * 2); height: 1px; }
 .sp-thought { margin-bottom: -8px; }
@@ -779,4 +812,4 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
   .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box,
   .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot { animation: none; }
 }
-.instant .msg, .instant .divider, .instant .death-box, .instant .sacred { animation: none; }
+.instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona { animation: none; }

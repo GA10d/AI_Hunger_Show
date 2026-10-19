@@ -1,6 +1,7 @@
 /* 对话区：气泡队列（打字机效果）、分隔条，以及三种“特殊轮”的对话框。
  *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, text, ghost, instant }, onShow)
  *   HungerChat.add({ kind: 'divider', icon: 'heart', text, instant }, onShow)
+ *   HungerChat.add({ kind: 'persona', name, avatar, personality, instant }, onShow)   // 入场时亮出的性格卡：一个优点 + 一个缺点
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
  *   HungerChat.add({ kind: 'sacred', variant: 'guess' | 'deny' | 'grant' | 'freedom', title, text, note, instant }, onShow)
  *   HungerChat.add({ kind: 'signal' }, onShow)   // 不显示任何东西，只在轮到它时调用 onShow
@@ -48,6 +49,26 @@
     el.innerHTML = `<div class="avatar px-box"><span class="sprite" data-sprite="${sprite}"></span></div>` + bubble;
     // 名字和台词都用 textContent：这里放的是 LLM 生成的文本，不能当 HTML 解析
     el.querySelector('.name').textContent = item.ghost ? `† ${item.name} · 遗言 †` : item.name;
+    Sprites.mount(el);
+    return el;
+  }
+
+  // 性格卡：一个优点（绿）+ 一个缺点（红）。名字和说明都是 LLM / 配置里的文字，用 textContent
+  function buildPersona(item) {
+    const el = document.createElement('article');
+    el.className = 'persona px-box';
+    el.style.setProperty('--accent', Sprites.accent(item.avatar));
+    el.innerHTML =
+      `<span class="gav px-box"><span class="sprite" data-sprite="${Sprites.avatar(item.avatar)}"></span></span>` +
+      '<div class="p-body"><div class="p-title"></div><div class="p-row good"><b class="chip good"></b><span class="p-tip"></span></div>' +
+      '<div class="p-row bad"><b class="chip bad"></b><span class="p-tip"></span></div></div>';
+    const { virtue, flaw } = item.personality;
+    el.querySelector('.p-title').textContent = `${item.name} 的性格`;
+    const rows = el.querySelectorAll('.p-row');
+    rows[0].querySelector('.chip').textContent = `优点 · ${virtue.name}`;
+    rows[0].querySelector('.p-tip').textContent = virtue.tip || '';
+    rows[1].querySelector('.chip').textContent = `缺点 · ${flaw.name}`;
+    rows[1].querySelector('.p-tip').textContent = flaw.tip || '';
     Sprites.mount(el);
     return el;
   }
@@ -127,9 +148,9 @@
       next();
       return;
     }
-    if (item.kind === 'divider' || item.kind === 'death') {
-      append(item.kind === 'death' ? buildDeath(item) : buildDivider(item));
-      setTimeout(next, instant ? 0 : (item.kind === 'death' ? 1400 : 500)); // 死亡后停顿久一点
+    if (item.kind === 'divider' || item.kind === 'death' || item.kind === 'persona') {
+      append(item.kind === 'death' ? buildDeath(item) : item.kind === 'persona' ? buildPersona(item) : buildDivider(item));
+      setTimeout(next, instant ? 0 : (item.kind === 'death' ? 1400 : item.kind === 'persona' ? 900 : 500)); // 死亡后停顿久一点
       return;
     }
     const sacred = item.kind === 'sacred';

@@ -230,6 +230,12 @@
     render();
   }
 
+  function introduce(id, o = {}) { // 性格卡亮出来的时候：转个身，冒个星星
+    const a = find(id);
+    if (!a || o.instant || a.mode !== 'idle' && a.mode !== 'enter') return;
+    face(a, 'happy', 1100); emote(a, 'star', 1300);
+  }
+
   function say(id, o = {}) {
     const a = find(id);
     if (!a || o.instant) return;
@@ -823,7 +829,7 @@
   if (!REDUCED) requestAnimationFrame(frame);
 
   global.HungerStage = {
-    VARIANTS, fitStage, spawn, say, think, envSay, lastWords, declare, die, victory, reset,
+    VARIANTS, fitStage, spawn, introduce, say, think, envSay, lastWords, declare, die, victory, reset,
     _debug: () => ({ actors: actors.map(a => ({ id: a.id, mode: a.mode, x: Math.round(a.x), pose: a.pose, expr: a.expr })), markers: markers.length, ghosts: ghosts.length, W, H }),
   };
 })(window);

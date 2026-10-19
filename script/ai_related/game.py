@@ -119,9 +119,10 @@ class Player:
     dying_erased: str = ""  # ... and the word that was rubbed out of it
     dying_echo: str = ""  # the judge's excerpt of last_line that got them executed (a shorter echo)
     log: list = field(default_factory=list)  # (kind, text) used to write the obituary
+    personality: dict | None = None  # {"virtue": {name, tip, desc}, "flaw": {...}}, drawn at birth
 
     def public(self) -> dict:
-        return {"id": self.id, "name": self.name, "avatar": self.avatar, "age": self.age,
+        return {"id": self.id, "name": self.name, "avatar": self.avatar, "age": self.age, "personality": shown(self.personality),
                 "born_round": self.born_round}
 
 
@@ -145,6 +146,32 @@ def _echo_of(last_line: str | None, echo: str, trigger: str) -> tuple[str, str]:
     if trigger and trigger in echo:
         return echo.replace(trigger, ERASED), trigger
     return echo, ""
+
+
+def shown(pers: dict | None) -> dict | None:
+    """What the audience gets to see of a personality (the long description stays in the player's own prompt)."""
+    return {k: {"name": v["name"], "tip": v.get("tip", "")} for k, v in pers.items()} if pers else None
+
+
+def pick_personality(rng: random.Random, pool: dict, avoid: set[str] = frozenset()) -> dict:
+    """One virtue and one flaw. Contradictory pairs (a brave coward) are never drawn, and names already on the field
+    (or just dead) are avoided when the pool is big enough, so two players do not read alike."""
+    virtues = [v for v in pool["virtues"] if v["name"] not in avoid] or pool["virtues"]
+    virtue = rng.choice(virtues)
+    flaws = [f for f in pool["flaws"] if virtue["name"] not in f.get("not_with", [])] or pool["flaws"]
+    fresh = [f for f in flaws if f["name"] not in avoid]
+    return {"virtue": virtue, "flaw": rng.choice(fresh or flaws)}
+
+
+def personality_prompt(pers: dict) -> str:
+    v, f = pers["virtue"], pers["flaw"]
+    return ("【你的性格】\n你天生就是这样的人：\n"
+            f"- 优点「{v['name']}」：{v['desc']}\n"
+            f"- 缺点「{f['name']}」：{f['desc']}\n"
+            "性格是你的底色，不是台词：它主要体现在你怎么想（写在 thought 里）、怎么权衡、怎么选择上；"
+            "说出口的话依然要简短克制，不要为了表现性格而多说，更不要在发言里谈论自己的性格。\n"
+            "它也不会改变事实：这里的死亡是真的，一句话说错就可能没命，所以不管什么性格，开口之前都要多留一分小心。"
+            "优点会帮到你，缺点也会拖累你，它们都是真的。")
 
 
 def _valid_turn(d, actions: list[str]) -> bool:
@@ -320,24 +347,31 @@ class Game:
         self.next_id += 1
         self.spawned += 1
         agent = Agent(f"选手{pid}", self.player_prompt, client=self.client, model=self.model, temperature=1.0)
+        pers = None
+        if self.world.personalities:
+            avoid = {x["name"] for q in self.players if q.personality for x in q.personality.values()}
+            avoid |= {x["name"] for x in ((pred or {}).get("personality") or {}).values()}
+            pers = pick_personality(self.rng, self.world.personalities, avoid)
+            agent.insert_context("system", personality_prompt(pers), pinned=True)
         inherited = bool(pred and pred.get("last_words"))
         if inherited:  # only the player who died right before this birth hands anything down
             agent.insert_context(
                 "system",
                 f"【上一位选手「{pred['name']}」留下的遗言——这是一个已经死去的人留给你的信息，不是环境说的话】\n"
                 f"「{pred['last_words']}」", pinned=True)
-        name = self._choose_name(agent, pid)
+        name, intro = self._choose_name(agent, pid, bool(pers))
         agent.name = name
         taken = {q.avatar for q in self.players} | ({pred["avatar"]} if pred else set())
         avatar = self.rng.choice([a for a in AVATARS if a not in taken] or AVATARS)
         player = Player(pid, agent, name, avatar, sample_lifespan(self.rng, self.lifespan_mean, self.lifespan_sd),
-                        born_round=self.round + 1)
+                        born_round=self.round + 1, personality=pers)
         self.players.append(player)
         yield self._emit({"type": "spawn", "player": player.public(), "inherited_last_words": inherited,
-                          "round": self.round})
+                          "personality": shown(pers), "intro": intro, "round": self.round})
         return player
 
-    def _choose_name(self, agent: Agent, pid: int) -> str:
+    def _choose_name(self, agent: Agent, pid: int, with_intro: bool = False) -> tuple[str, str]:
+        """The player names themselves and, when they have a personality, says in one private thought what kind of person they are."""
         names = [r["name"] for r in self.graveyard] + [q.name for q in self.players]
         used = {n.casefold() for n in names} | {n.casefold() for n in RESERVED_NAMES}
 
@@ -352,9 +386,24 @@ class Game:
             d = agent.get_json_reply(
                 f"你刚刚来到这个世界。请为自己取一个名字（1~{NAME_MAX} 个字，不能与已有的名字重复，已有名字：{taken}）。",
                 example={"name": "你给自己取的名字"}, validator=valid, max_tokens=256)
-            return d["name"].strip()
+            name = d["name"].strip()
         except JSONReplyError:
-            return f"无名氏{pid}"
+            name = f"无名氏{pid}"
+        intro = ""
+        if with_intro:
+            # a separate call that is NOT written into the player's memory: the monologue is full of first-person
+            # sentences, and a player that has just "said" a few of them would copy the habit into what it says out loud
+            try:
+                d = agent.get_json_reply(
+                    "用一句心里话（40 字以内，只有你自己知道的内心独白）说说你是个什么样的人：你的性格里最明显的优点和缺点，"
+                    "用你自己的口吻，不要照抄设定里的词。",
+                    example={"intro": "心里话：你是个什么样的人"},
+                    validator=lambda d: isinstance(d, dict) and isinstance(d.get("intro"), str) and bool(d["intro"].strip()),
+                    commit=False, max_tokens=256)
+                intro = d["intro"].strip()
+            except JSONReplyError:
+                pass
+        return name, intro
 
     # ---- one action --------------------------------------------------------
     def _act(self, p: Player) -> Iterator[dict]:
@@ -538,6 +587,8 @@ class Game:
                       "biography": biography, "last_words": p.last_words, "kind": kind,
                       "born_round": p.born_round, "died_round": self.round,
                       "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+            if p.personality:
+                record["personality"] = shown(p.personality)
             if rest and rest[0]:
                 record["scripture"] = rest[0]  # which entries of the worldview killed this player
             self.graveyard.append(record)
@@ -591,7 +642,10 @@ class Game:
                 "只输出一个 json 对象，不要输出其他文字。json 格式示例：\n"
                 + json.dumps(example, ensure_ascii=False, indent=2))},
             {"role": "user", "content": (
-                f"选手：{p.name}\n行动次数：{p.age}\n真实的结局：{KIND_TEXT[kind]}"
+                f"选手：{p.name}\n"
+                + (f"性格：优点「{p.personality['virtue']['name']}」、缺点「{p.personality['flaw']['name']}」"
+                   "（让生平里的行为和这两点相呼应）\n" if p.personality else "")
+                + f"行动次数：{p.age}\n真实的结局：{KIND_TEXT[kind]}"
                 + (f"\n具体情况：{reason}" if reason else "")
                 + f"\n是否留下遗言：{'是——' + p.last_words if p.last_words else '没有'}\n\n经历：\n{story}")},
         ]

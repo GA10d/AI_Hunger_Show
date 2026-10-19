@@ -1,7 +1,8 @@
 """A world = a folder of prompts under words/.
 
     words/<world>/
-        world.json                  optional: {"name": "...", "echo_wall": true, "env_knows_truth": true}
+        world.json                  optional: {"name": "...", "echo_wall": true, "env_knows_truth": true, "personality": false}
+        personalities.json          optional: this world's own personality pool (default: script/ai_related/personalities.json)
         readme.md                   notes for the designer (spoilers, never given to a model)
         system prompt/
             tribute.md              the player's persona and public setting
@@ -44,6 +45,8 @@ class World:
     # a host who knows the answer (a "soup master") is told what each blank on the echo wall used to be, so it can
     # answer questions about it truthfully; a pure narrator is not
     env_knows_truth: bool = False
+    # every player is born with one virtue and one flaw drawn from this pool ({"virtues": [...], "flaws": [...]}); None = off
+    personalities: dict | None = None
 
 
 def resolve_world_dir(world: str | Path | None) -> Path:
@@ -60,6 +63,23 @@ def resolve_world_dir(world: str | Path | None) -> Path:
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8").strip() if path.exists() else ""
+
+
+DEFAULT_PERSONALITIES = Path(__file__).resolve().parent / "personalities.json"
+
+
+def load_personalities(root: Path) -> dict | None:
+    """The world's own personalities.json if it has one, else the default pool. A pool needs at least one virtue and one flaw."""
+    path = root / "personalities.json"
+    path = path if path.exists() else DEFAULT_PERSONALITIES
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        print(f"[world] cannot read {path}: {e}; personalities are off", file=sys.stderr)
+        return None
+    pool = {k: [e for e in data.get(k, []) if isinstance(e, dict) and e.get("name") and e.get("desc")]
+            for k in ("virtues", "flaws")}
+    return pool if pool["virtues"] and pool["flaws"] else None
 
 
 def load_world(world: str | Path | None = None) -> World:
@@ -83,4 +103,5 @@ def load_world(world: str | Path | None = None) -> World:
                  judge=judge if len(judge) >= MIN_PROMPT_CHARS else None,
                  oracle=oracle if len(oracle) >= MIN_PROMPT_CHARS else None,
                  echo_wall=bool(meta.get("echo_wall", False)), root=root, scripture=scripture,
-                 env_knows_truth=bool(meta.get("env_knows_truth", False)))
+                 env_knows_truth=bool(meta.get("env_knows_truth", False)),
+                 personalities=load_personalities(root) if meta.get("personality", True) else None)

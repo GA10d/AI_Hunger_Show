@@ -66,9 +66,16 @@
           kind: 'divider', icon: 'heart', instant,
           text: `第 ${p.id} 位选手「${p.name}」入场${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
         }, show(() => {
-          state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0 });
+          state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0, personality: ev.personality || p.personality });
           HungerStage.spawn(p, { instant });
         }));
+        // 入场时亮出性格（一个优点 + 一个缺点），再由他自己用一句心里话说说自己是个什么样的人
+        if (ev.personality) {
+          HungerChat.add({ kind: 'persona', name: p.name, avatar: p.avatar, personality: ev.personality, instant }, show(() => HungerStage.introduce(p.id, { instant })));
+        }
+        if (ev.intro) {
+          HungerChat.add({ kind: 'message', who: 'player', name: p.name, avatar: p.avatar, text: ev.intro, thought: true, instant }, show());
+        }
         break;
       }
       case 'message':

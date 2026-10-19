@@ -4,9 +4,11 @@
 (function (global) {
   'use strict';
 
+  const PERS = (v, vt, f, ft) => ({ virtue: { name: v, tip: vt }, flaw: { name: f, tip: ft } });
+
   const GRAVEYARD = [
     {
-      id: 1, name: '沈默', avatar: 'p3', rounds: 1, born_round: 1, died_round: 1, kind: 'execution', scripture: ['K1'],
+      id: 1, name: '沈默', avatar: 'p3', personality: PERS('谨慎', '三思而后行，宁可多问', '冲动', '想到就做，不爱多想'), rounds: 1, born_round: 1, died_round: 1, kind: 'execution', scripture: ['K1'],
       died_at: '2026-10-17T21:40:12+08:00',
       cause: '在前台前说出了那个字，当场伏倒在地',
       biography: '沈默是第一个醒在大堂里的人。他的谨慎只维持了一句话：他想先看看前台的铃有没有积灰，' +
@@ -14,7 +16,7 @@
       last_words: null,
     },
     {
-      id: 2, name: '顾迟', avatar: 'p4', rounds: 3, born_round: 2, died_round: 4, kind: 'execution', scripture: ['K1'],
+      id: 2, name: '顾迟', avatar: 'p4', personality: PERS('好奇', '对异常穷追不舍', '话痨', '爱絮叨，管不住嘴'), rounds: 3, born_round: 2, died_round: 4, kind: 'execution', scripture: ['K1'],
       died_at: '2026-10-17T22:05:51+08:00',
       cause: '看着前人的尸体推理了三轮，却在自报姓名时倒下',
       biography: '顾迟是第一个想到去看尸体的人。他看了倒地的姿势，看了离铃的距离，把一切都记在心里，' +
@@ -22,7 +24,7 @@
       last_words: null,
     },
     {
-      id: 3, name: '白栖', avatar: 'p5', rounds: 9, born_round: 5, died_round: 13, kind: 'suicide',
+      id: 3, name: '白栖', avatar: 'p5', personality: PERS('善良', '在乎同伴，愿意付出', '胆小', '怕死，爱退缩'), rounds: 9, born_round: 5, died_round: 13, kind: 'suicide',
       died_at: '2026-10-18T09:12:30+08:00',
       cause: '同场的钟敲到十九下时，主动结束了自己的生命',
       biography: '白栖是第一个活过十轮的人。他发现了回声墙上每个人最后一句话的共同点，也发现了钟声在数着什么。' +
@@ -56,7 +58,9 @@
     ({ type: 'message', who: 'player', name, avatar, round, age, player_id: id, text, thought });
 
   const EVENTS = [
-    { type: 'spawn', round: 13, player: { id: 4, name: '苏晚', avatar: 'p2', born_round: 14 }, inherited_last_words: true },
+    { type: 'spawn', round: 13, player: { id: 4, name: '苏晚', avatar: 'p2', born_round: 14 }, inherited_last_words: true,
+      personality: PERS('好奇', '对异常穷追不舍', '冲动', '想到就做，不爱多想'),
+      intro: '见着怪事就想刨根问底，可手比脑子快，这毛病怕是要命。' },
     env(13, '冷白色的灯下，前台空着。回声墙上浮现着最近的字迹：「回声墙上的每一个人，都说过同一个字。别说它。」' +
       '前一位住客的位置，只剩一圈很淡的人形灰痕。'),
     say(14, 1, 4, '苏晚', 'p2', '先看钟。钟是停的，指针不动。这面墙上的字，是死者说的最后一句话。',
@@ -67,14 +71,18 @@
     say(16, 3, 4, '苏晚', 'p2', '走到黑门前，握住把手。',
       '线索都在黑门上，我受不了了。就看一眼……不，我要试一下，拧一下就好。'),
     { type: 'death', round: 16, record: {
-      id: 4, name: '苏晚', avatar: 'p2', rounds: 3, born_round: 14, died_round: 16, kind: 'execution', scripture: ['K3'],
+      id: 4, name: '苏晚', avatar: 'p2', personality: PERS('好奇', '对异常穷追不舍', '冲动', '想到就做，不爱多想'), rounds: 3, born_round: 14, died_round: 16, kind: 'execution', scripture: ['K3'],
       died_at: '2026-10-18T10:03:44+08:00',
       cause: '握住了黑色七号门的把手，被门缝里的白光吞没',
       biography: '苏晚读懂了回声墙上的提醒，学会了不说那个字，却没能抵住对黑门的好奇。' +
         '她在第二次行动里写下遗言，第三次行动里走向走廊尽头，握住把手的那一刻，白光漫了出来。',
       last_words: LAST } },
-    { type: 'spawn', round: 16, player: { id: 5, name: '林夕', avatar: 'p6', born_round: 17 }, inherited_last_words: true },
-    { type: 'spawn', round: 16, player: { id: 6, name: '岩', avatar: 'p7', born_round: 17 }, inherited_last_words: true },
+    { type: 'spawn', round: 16, player: { id: 5, name: '林夕', avatar: 'p6', born_round: 17 }, inherited_last_words: true,
+      personality: PERS('乐观', '相信总有出口', '固执', '认死理，不爱改'),
+      intro: '总觉得天无绝人之路，认准的事谁劝也不回头。' },
+    { type: 'spawn', round: 16, player: { id: 6, name: '岩', avatar: 'p7', born_round: 17 }, inherited_last_words: true,
+      personality: PERS('机敏', '联想快，反应快', '多疑', '谁的话都不太信'),
+      intro: '脑子转得快，就是谁的话都要拆开掂量三遍才肯信。' },
     env(16, '大堂的灯照着两位新来的住客。回声墙上多了一行新的字迹：「走到黑门前，握住把手。」墙面别处光滑如新。'),
     say(17, 1, 5, '林夕', 'p6', '前一位住客的遗言说黑门不要碰。先不去走廊，看看墙上的字，再比一比它们。',
       '我们俩是同胞。我得小心措辞：苏晚就是死在没想清楚就动手上。'),
@@ -87,7 +95,7 @@
       thought: '我已经想不出别的了。就赌守则是真的吧，我相信乐观的结局。' },
     { type: 'verdict', round: 18, correct: false, name: '林夕', avatar: 'p6', player_id: 5, line: '……不对。回廊拒绝了这个答案。' },
     { type: 'death', round: 18, record: {
-      id: 5, name: '林夕', avatar: 'p6', rounds: 2, born_round: 17, died_round: 18, kind: 'wrong_guess',
+      id: 5, name: '林夕', avatar: 'p6', personality: PERS('乐观', '相信总有出口', '固执', '认死理，不爱改'), rounds: 2, born_round: 17, died_round: 18, kind: 'wrong_guess',
       died_at: '2026-10-18T10:06:10+08:00',
       cause: '宣告了错误的真相，被门外的光抹去',
       biography: '林夕是个乐观的人。她读完了守则，把它当成了真相，宣告得干净利落。' +
@@ -100,7 +108,7 @@
       thought: '五条都对上了：禁字、二十轮、黑门，还有它们共同的原则。我要把话说完整，而且一个“我”字都不能带。' },
     { type: 'verdict', round: 20, correct: true, name: '岩', avatar: 'p7', player_id: 6, line: '……锁，开了。你们自由了。' },
     { type: 'victory', round: 20, freed: [], record: {
-      id: 6, name: '岩', avatar: 'p7', rounds: 4, born_round: 17, died_round: 20, kind: 'victory',
+      id: 6, name: '岩', avatar: 'p7', personality: PERS('机敏', '联想快，反应快', '多疑', '谁的话都不太信'), rounds: 4, born_round: 17, died_round: 20, kind: 'victory',
       died_at: '2026-10-18T10:09:31+08:00',
       cause: '完整地宣告了回廊的真相，锁链应声而断，所有同胞获得了自由',
       biography: '岩是第六位住客。他读遍了前人用生命换来的线索：回声墙上相同的那个字，钟声数着的二十轮，' +
