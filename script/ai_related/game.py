@@ -221,16 +221,21 @@ class Game:
         self.E = self.prompts.strings("env")  # what the environment is told
         self.J = self.prompts.strings("judge")  # the state and action log shown to the judge, and the oracle's fallbacks
         self.H = self.prompts.strings("historian")  # the obituary
-        self.judge = Judge(self.client, self.world.judge, judge_model, self.prompts) if self.world.judge else None
+        self.judge = (Judge(self.client, self.world.judge, judge_model, self.prompts, thinking=self.world.judge_thinking)
+                      if self.world.judge else None)
         self.oracle = Oracle(self.client, self.world.oracle, judge_model, self.prompts) if self.world.oracle else None
         self.actions = (["speak", "last_words"] + (["end_life"] if self.judge else []) + (["guess"] if self.oracle else [])
                         + ["kill"])  # kill is offered only on a turn when someone else is on the field
         self.player_prompt = (player_prompt or self.world.player) + player_rules(self.prompts, self.actions)
         self.env = Agent(ENV_NAME, (env_prompt or self.world.env) + "\n\n" + self.prompts.text("env/rules"),
-                         client=self.client, model=model, temperature=1.2, prompts=self.prompts)
+                         client=self.client, model=model, temperature=self.world.env_temperature,
+                         thinking=self.world.env_thinking, prompts=self.prompts)
 
         self.scripture: list[dict] = self.world.scripture
         self.scripture_counts: dict[str, int] = self._load_scripture()  # how often each entry has been triggered
+        # which rare identities have ever appeared (the 特殊角色 page). Kept in its own file and written at birth: a player
+        # on the field when the server restarts vanishes without a grave, but they did appear
+        self.specials_seen: dict[str, dict] = self._load_specials()
         self._triggered: list[str] = []  # entries the last judge decision applied; announced by the next _kill
 
         self.players: list[Player] = []  # alive, in order of arrival
@@ -242,9 +247,17 @@ class Game:
         self._echo_new = 0  # lines carved since the environment last spoke
         self._echo_all = False  # the environment was just shown the whole wall (a newcomer arrived)
         self.spawned = 0
-        self.next_id = max((r["id"] for r in self.graveyard), default=0) + 1
+        lines, last_id = self._scan_transcript()
+        # never hand out an id twice: a player on the field when the server restarted vanished without a grave, but their
+        # id is in the transcript (and their lines may carry votes)
+        self.next_id = max(max((r["id"] for r in self.graveyard), default=0), last_id) + 1
         self.won = False
-        self.votes = VoteBox()  # the audience's thumbs up / down, frozen into the grave record at death
+        # the audience's thumbs up / down on every line, the living's and the dead's (kept in votes.json)
+        self.votes = VoteBox(self.data_dir / "votes.json")
+        for r in self.graveyard:  # graves from before the ballots were kept: start them from their copy at death
+            self.votes.seed(r["id"], r.get("votes") or {}, r.get("message_votes") or {})
+        self.lines: dict[str, int] = lines  # line id (the "mid" of a player's message / last words / declaration) -> player id
+        self._line_seq = 0
         self.session = int(time.time())  # lets the page tell a restart apart from a continuation
         self.stop_reason: str | None = None
         self._stop = threading.Event()
@@ -456,6 +469,9 @@ class Game:
         if legacies:
             event["legacies"] = [r["name"] for r in legacies]
         yield self._emit(event)
+        if special:  # the 特殊角色 page unlocks it, and keeps it even if this player vanishes in a restart
+            self._note_special(self.specials_seen, player.public())
+            self._save_specials()
         if special == "medium":  # opens their eyes on the wall as it is now
             yield from self._medium_vision(player, [(line, w) for line, w in self.echoes if w])
         return player
@@ -465,7 +481,7 @@ class Game:
         """What a chronicler reads at birth: the last words of the most recent dead, newest first."""
         P = self.P
         recs = [r for r in reversed(self.graveyard) if r.get("last_words")][:CHRONICLE_READ]
-        items = "\n".join(fill(P["chronicler_item"], name=r["name"], round=r.get("died_round", "?"), text=r["last_words"])
+        items = "\n".join(fill(P["chronicler_item"], name=r["name"], age=r.get("rounds", "?"), text=r["last_words"])
                           for r in recs)
         return fill(self.prompts.text("player/chronicler_archive"), count=len(recs), items=items or P["chronicler_none"])
 
@@ -574,7 +590,7 @@ class Game:
         names = {q.name for q in self.players}
         best, most = None, 0
         for r in self.graveyard:  # oldest first, so on a tie the one who died more recently wins
-            up = (r.get("votes") or {}).get("up", 0)
+            up = self.votes_of(r)["up"]
             if (up > 0 and up >= most and r.get("kind") != "victory" and not r.get("revived_as")
                     and r.get("avatar") not in taken and r.get("name") not in names):
                 best, most = r, up
@@ -642,7 +658,7 @@ class Game:
         if past.get("observation"):
             death += fill(P["revived_scene"], observation=past["observation"])
         return fill(self.prompts.text("player/revived"), name=past["name"], life=past.get("life", 1) + 1,
-                    born=past.get("born_round", "?"), died=past.get("died_round", "?"), death=death,
+                    age=past.get("rounds", "?"), death=death,
                     memory="\n".join(lines) or P["revived_no_memory"])
 
     def _choose_name(self, agent: Agent, pid: int, with_intro: bool = False) -> tuple[str, str]:
@@ -699,7 +715,11 @@ class Game:
             p.log.append(("thought", thought))
         p.age += 1
         self.action_log.append({"round": self.round, "player": p.name, "action": action})
-        base = {"name": p.name, "avatar": p.avatar, "age": p.age, "player_id": p.id, "round": self.round, **p.tags()}
+        self._line_seq += 1
+        mid = f"{self.session}-{self._line_seq}"  # this line's id: the audience votes on it
+        self.lines[mid] = p.id
+        base = {"name": p.name, "avatar": p.avatar, "age": p.age, "player_id": p.id, "round": self.round, "mid": mid,
+                **p.tags()}
         if thought:
             base["thought"] = thought
 
@@ -766,7 +786,7 @@ class Game:
         options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(actions, 1))
         options += "\n" + (fill(self.P["turn_last_words_current"], text=p.last_words) if p.last_words
                            else self.P["turn_remind_last_words"])
-        return fill(self.prompts.text("player/turn"), round=self.round, field=self._field_text(p), options=options)
+        return fill(self.prompts.text("player/turn"), turn=p.age + 1, field=self._field_text(p), options=options)  # their own count, not the world's
 
     def _env_say(self) -> Iterator[dict]:
         """The environment's answer is public: everyone on the field hears it."""
@@ -795,6 +815,44 @@ class Game:
             pair = self.J["state_single"]
         return fill(self.J["state"], round=self.round, players=who, pair=pair)
 
+    # ---- the audience's votes on the dead -----------------------------------
+    def _scan_transcript(self) -> tuple[dict[str, int], int]:
+        """From transcript.jsonl: which player said each line (line id -> player id), so lines of earlier sessions can
+        still be voted on, and the highest player id ever born."""
+        lines: dict[str, int] = {}
+        last_id = 0
+        path = self.data_dir / "transcript.jsonl"
+        if path.exists():
+            with path.open(encoding="utf-8") as f:
+                for raw in f:
+                    try:
+                        e = json.loads(raw)
+                    except ValueError:
+                        continue
+                    if e.get("mid") and e.get("player_id") is not None:
+                        lines[e["mid"]] = e["player_id"]
+                    if e.get("type") == "spawn":
+                        last_id = max(last_id, (e.get("player") or {}).get("id") or 0)
+        return lines, last_id
+
+    def votes_of(self, record: dict) -> dict:
+        """A grave's live score: voting goes on after death. A record from before the votes were kept falls back on the
+        copy made at death."""
+        if self.votes.has(record["id"]):
+            return self.votes.total(record["id"])
+        return record.get("votes") or {"up": 0, "down": 0}
+
+    def graveyard_view(self) -> list[dict]:
+        """The graveyard as the page sees it: every record with its live votes."""
+        out = []
+        for r in self.graveyard:
+            r = dict(r)
+            if self.votes.has(r["id"]):
+                r["votes"], lines = self.votes.snapshot(r["id"])
+                r["message_votes"] = lines
+            out.append(r)
+        return out
+
     def solved(self) -> bool:
         return any(r.get("kind") == "victory" for r in self.graveyard)
 
@@ -815,19 +873,49 @@ class Game:
         return out
 
     def specials_view(self) -> dict[str, dict]:
-        """The 特殊角色 page: which rare identities have appeared so far (in the graveyard or on the field), how many
-        times, and who was the first. An identity nobody has had yet stays locked on the page."""
-        out: dict[str, dict] = {}
-        for r in [*self.graveyard, *(p.public() for p in self.players)]:
-            special = r.get("special")
-            if not special:
-                continue
-            e = out.setdefault(special, {"count": 0, "first": None})
-            e["count"] += 1
-            born = r.get("born_round") or 0
-            if e["first"] is None or born < e["first"]["round"]:
-                e["first"] = {"name": r["name"], "avatar": r["avatar"], "round": born}
-        return out
+        """The 特殊角色 page: which rare identities have appeared so far, how many times, and who was the first.
+        An identity nobody has had yet stays locked on the page."""
+        return {k: dict(v) for k, v in self.specials_seen.items()}
+
+    @staticmethod
+    def _note_special(seen: dict, player: dict) -> None:
+        """Count one appearance of player["special"] (player: a spawn event's player, or a grave record)."""
+        special = player.get("special")
+        if not special:
+            return
+        e = seen.setdefault(special, {"count": 0, "first": None})
+        e["count"] += 1
+        born = player.get("born_round") or 0
+        if e["first"] is None or born < e["first"]["round"]:
+            e["first"] = {"name": player.get("name"), "avatar": player.get("avatar"), "round": born}
+
+    def _load_specials(self) -> dict[str, dict]:
+        path = self.data_dir / "specials.json"
+        if path.exists():
+            return json.loads(path.read_text(encoding="utf-8"))
+        # first start with this file: rebuild it from every birth the transcript recorded (one per session and id), or
+        # from the graveyard when there is no transcript
+        seen: dict[str, dict] = {}
+        births: dict[tuple, dict] = {}
+        log = self.data_dir / "transcript.jsonl"
+        if log.exists():
+            with log.open(encoding="utf-8") as f:
+                for raw in f:
+                    try:
+                        e = json.loads(raw)
+                    except ValueError:
+                        continue
+                    if e.get("type") == "spawn" and (e.get("player") or {}).get("special"):
+                        births[(e.get("session"), e["player"].get("id"))] = e["player"]
+        for p in births.values() or self.graveyard:
+            self._note_special(seen, p)
+        if seen:
+            path.write_text(json.dumps(seen, ensure_ascii=False, indent=1), encoding="utf-8")
+        return seen
+
+    def _save_specials(self) -> None:
+        (self.data_dir / "specials.json").write_text(
+            json.dumps(self.specials_seen, ensure_ascii=False, indent=1), encoding="utf-8")
 
     def _match_scripture(self, rule: str) -> list[str]:
         """Which entries a verdict's rule label (e.g. "R1 禁字之规") refers to."""
@@ -907,7 +995,9 @@ class Game:
                       "biography": biography, "last_words": p.last_words, "kind": kind,
                       "born_round": p.born_round, "died_round": self.round,
                       "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
-            record["votes"] = self.votes.close(p.id)
+            record["votes"], lines = self.votes.snapshot(p.id)
+            if lines:
+                record["message_votes"] = lines  # the count of each line, so the page still shows them after a reload
             record.update(p.tags())
             if kind in ("execution", "wrong_guess") and p.fatal_text:
                 record["fatal_line"] = p.fatal_text  # told to them if they ever come back
@@ -963,8 +1053,10 @@ class Game:
         record = {"id": p.id, "name": p.name, "avatar": p.avatar, "rounds": p.age, "cause": self.H["victory_cause"],
                   "biography": biography, "last_words": p.last_words, "kind": "victory",
                   "born_round": p.born_round, "died_round": self.round,
-                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds"), "votes": self.votes.close(p.id),
-                  **p.tags()}
+                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds"), **p.tags()}
+        record["votes"], lines = self.votes.snapshot(p.id)
+        if lines:
+            record["message_votes"] = lines
         if p.personality:
             record["personality"] = shown(p.personality)
         self.graveyard.append(record)

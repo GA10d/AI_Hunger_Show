@@ -8,6 +8,7 @@ import asyncio
 import json
 import mimetypes
 import os
+import re
 import secrets
 import threading
 import time
@@ -15,7 +16,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .client import DeepSeekClient
@@ -119,7 +120,7 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
 
     @app.get("/api/graveyard")
     def graveyard():
-        return game.graveyard
+        return game.graveyard_view()  # with the live votes: the dead can still be voted on
 
     @app.get("/api/scripture")
     def scripture():
@@ -135,7 +136,7 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
 
     @app.get("/api/graveyard/{player_id}")
     def grave(player_id: int):
-        for record in game.graveyard:
+        for record in game.graveyard_view():
             if record["id"] == player_id:
                 return record
         raise HTTPException(404, "no such player")
@@ -148,27 +149,27 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
             return request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or host
         return host
 
-    def tallies() -> dict:
-        return game.votes.tallies(p.id for p in game.players)
-
     @app.get("/api/votes")
     def votes(viewer: str = ""):
-        """The thumbs on the players on the field, and which ones this viewer gave."""
-        pids = [p.id for p in game.players]
-        return {"tallies": game.votes.tallies(pids), "mine": game.votes.mine(viewer[:64], pids) if viewer else {}}
+        """Every vote so far (each player's totals and each line's, the living and the dead), which lines this viewer
+        voted on, and the version to ask /api/poll for changes after."""
+        return {"tallies": game.votes.tallies(p.id for p in game.players), "version": game.votes.version,
+                "mine": game.votes.mine(viewer[:64]) if viewer else {}}
 
     @app.post("/api/vote")
-    def vote(request: Request, player_id: int = Body(...), vote: int = Body(...), viewer: str = Body(...)):
-        """Anyone watching may vote (1 up, -1 down, 0 take it back), once per player, while that player is on the field."""
+    def vote(request: Request, player_id: int = Body(...), message_id: str = Body(...), vote: int = Body(...),
+             viewer: str = Body(...)):
+        """Anyone watching may vote on a line (1 up, -1 down, 0 take it back): once per line, as many lines as they like,
+        whether its speaker is still alive or not."""
         viewer = viewer.strip()[:64]
         if vote not in (-1, 0, 1) or not viewer:
             raise HTTPException(400, "vote must be 1, -1 or 0, with a viewer id")
-        if not any(p.id == player_id for p in game.players):
-            raise HTTPException(409, "this player is no longer on the field")
-        tally = game.votes.cast(player_id, viewer, vote, address(request))
+        if game.lines.get(message_id) != player_id:
+            raise HTTPException(404, "no such line")
+        tally = game.votes.cast(player_id, message_id, viewer, vote, address(request))
         if tally is None:
             raise HTTPException(429, "too many voters from this address")
-        return {"player_id": player_id, "vote": vote, **tally}
+        return {"player_id": player_id, "message_id": message_id, "vote": vote, **tally}
 
     @app.post("/api/start", dependencies=[Depends(owner_only)])
     def start():
@@ -212,11 +213,11 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
                 # proves the stream really flows; behind a proxy that buffers SSE it never arrives and the page polls
                 yield "event: hello\ndata: {}\n\n"
                 idle = 0.0
-                seen_votes = -1
+                seen_votes = -1  # the thumbs: a named event, never part of the history; everything once, then what changed
                 while not await request.is_disconnected():
-                    if game.votes.version != seen_votes:  # the thumbs: a named event, never part of the history
-                        seen_votes = game.votes.version
-                        yield f"event: votes\ndata: {json.dumps(tallies())}\n\n"
+                    if game.votes.version != seen_votes:
+                        seen_votes, changed = game.votes.changes(seen_votes)
+                        yield f"event: votes\ndata: {json.dumps(changed)}\n\n"
                     batch = runner.since(index)
                     for i, event in enumerate(batch, start=index):
                         event = mark_replay(event, i, total, fresh)
@@ -234,9 +235,10 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     @app.get("/api/poll")
-    def poll(after: int = -1, viewer: str = ""):
+    def poll(after: int = -1, viewer: str = "", votes_after: int = -1):
         """The same events as /api/events, for pages whose stream a proxy holds back.
-        `after` is the index of the last event the page has; send the reply's `last` next time."""
+        `after` is the index of the last event the page has; send the reply's `last` next time.
+        `votes_after` is the vote version the page has; send the reply's `votes_version` next time."""
         viewer = viewer[:64]
         if viewer not in runner.pollers and runner.viewers >= max_viewers:
             raise HTTPException(503, "too many viewers right now")
@@ -244,8 +246,34 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
             runner.polled(viewer)
         index, total, fresh = resume(after)
         batch = runner.since(index)
+        version, changed = game.votes.changes(votes_after)
         return {"events": [mark_replay(e, i, total, fresh) for i, e in enumerate(batch, start=index)],
-                "last": index + len(batch) - 1, "votes": tallies()}
+                "last": index + len(batch) - 1, "votes": changed, "votes_version": version}
+
+    # The page's own files must never go stale: a proxy in front (Cloudflare caches .js / .css for hours by default)
+    # would otherwise keep serving old scripts to a new server. Every page file is "no-cache" (always revalidated by
+    # ETag), and index.html points at each script / stylesheet with ?v=<its modification time>, so a changed file is a
+    # new URL that no cache has seen. The music files (big, never change) may be cached.
+    @app.middleware("http")
+    async def no_stale_page(request: Request, call_next):
+        response = await call_next(request)
+        path = request.url.path
+        if not path.startswith(("/api/", "/music/")) or path == "/music/playlist.js":
+            response.headers["Cache-Control"] = "no-cache"
+        return response
+
+    asset = re.compile(r'((?:src|href)=")((?:js|css|assets)/[^"?]+|\.\./music/playlist\.js)(?:\?v=[^"]*)?"')
+
+    def versioned(match: re.Match) -> str:
+        rel = match.group(2)
+        path = MUSIC_DIR / "playlist.js" if rel.startswith("../music/") else WEB_DIR / rel
+        version = int(path.stat().st_mtime) if path.exists() else 0
+        return f'{match.group(1)}{rel}?v={version}"'
+
+    @app.get("/", include_in_schema=False)
+    @app.get("/index.html", include_in_schema=False)
+    def index():
+        return HTMLResponse(asset.sub(versioned, (WEB_DIR / "index.html").read_text(encoding="utf-8")))
 
     if MUSIC_DIR.is_dir():  # the page asks for ../music/<file>, which from "/" resolves to /music/<file>
         app.mount("/music", StaticFiles(directory=MUSIC_DIR), name="music")

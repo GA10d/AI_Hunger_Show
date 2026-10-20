@@ -137,7 +137,7 @@
     const victory = r.kind === 'victory';
     btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause, r.personality, r),
       meta([`存活 ${r.rounds} 轮`, r.died_round != null ? `第 ${r.died_round} 轮${victory ? '解开了回廊' : '死亡'}` : '']));
-    if (r.votes) btn.lastChild.append(HungerVotes.badge(r.votes, 'sealed'));
+    btn.lastChild.append(HungerVotes.liveBadge(r.id, r.votes));
     btn.addEventListener('click', () => showDetail(r));
     li.append(btn);
     return li;
@@ -148,7 +148,7 @@
     const card = el('div', 'grave alive px-box');
     card.append(sprite('heart', 'gtomb'), frame(p.avatar), who(p.name, '在世，还没有墓碑', p.personality, p),
       meta([`已存活 ${p.age} 轮`]));
-    card.lastChild.append(HungerVotes.badge(HungerVotes.tally(p.id)));
+    card.lastChild.append(HungerVotes.liveBadge(p.id));
     li.append(card);
     return li;
   }
@@ -206,9 +206,9 @@
     if (r.killed_by) info.append(el('div', 'gmeta', `死于「${r.killed_by}」之手`));
     if (r.kills && r.kills.length) info.append(el('div', 'gmeta', `亲手杀死了：${r.kills.map(n => `「${n}」`).join('、')}`));
     if (r.ghost) info.append(el('div', 'gmeta', `死后化作地缚灵，低语了 ${r.ghost.whispers || 0} 次${GHOST_END[r.ghost.end] ? '，' + GHOST_END[r.ghost.end] : ''}`));
-    if (r.votes) { // 观众的评价：死亡那一刻封存
+    { // 观众的评价：死后也照样能投，跟着变
       const v = el('div', 'gmeta bio-votes', '观众评价');
-      v.append(HungerVotes.badge(r.votes, 'sealed'));
+      v.append(HungerVotes.liveBadge(r.id, r.votes));
       info.append(v);
     }
     const head = el('div', 'bio-head');

@@ -625,6 +625,13 @@ body {
 .vote-tally.mine-down .vt.down b { color: #e0607a; }
 .vote-tally.bump { animation: vote-bump .4s steps(4); }
 .vote-tally.sealed .vt { opacity: .85; }
+/* 按句投票：可以点的那句话，鼠标移上去边框亮一下；它自己的票数挂在右下角，没人投时不显示 */
+.bubble.votable { cursor: pointer; }
+.bubble.votable:hover { filter: brightness(1.12); }
+.bubble.votable:focus-visible { outline: 2px dashed var(--gold); outline-offset: 4px; }
+.line-votes { position: absolute; right: 8px; bottom: -9px; z-index: 2; padding: 1px 5px; background: var(--ink); box-shadow: 0 0 0 2px var(--slate); font-size: 11px; }
+.line-votes.zero { display: none; }
+.tomb-bubble .line-votes { right: 50%; transform: translateX(50%); bottom: 6px; }
 .death-box .vote-tally { margin-top: 2px; }
 .grave .gmeta .vote-tally { margin-top: 2px; }
 .bio-votes { display: flex; align-items: center; gap: 8px; }

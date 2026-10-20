@@ -1,7 +1,8 @@
 """A world = a folder of prompts under words/.
 
     words/<world>/
-        world.json                  optional: {"name": "...", "echo_wall": true, "env_knows_truth": true, "personality": false}
+        world.json                  optional: {"name": "...", "echo_wall": true, "env_knows_truth": true, "personality": false,
+                                               "env_temperature": 0, "env_thinking": true, "judge_thinking": true}
         personalities.json          optional: this world's own personality pool (default: script/ai_related/personalities.json)
         readme.md                   notes for the designer (spoilers, never given to a model)
         system prompt/
@@ -16,6 +17,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config import JUDGE_THINKING
 from .prompts import Prompts
 
 REPO = Path(__file__).resolve().parents[2]
@@ -41,6 +43,12 @@ class World:
     env_knows_truth: bool = False
     # every player is born with one virtue and one flaw drawn from this pool ({"virtues": [...], "flaws": [...]}); None = off
     personalities: dict | None = None
+    # how the environment generates: a storyteller wants variety, a host who answers yes/no questions wants the same
+    # true answer every time (low temperature) and room to check the question against the truth first (thinking)
+    env_temperature: float = 1.2
+    env_thinking: bool = False
+    # the rule judge reasons before it rules (default config.JUDGE_THINKING): slower, but misses less
+    judge_thinking: bool = True
 
 
 def resolve_world_dir(world: str | Path | None) -> Path:
@@ -99,4 +107,6 @@ def load_world(world: str | Path | None = None) -> World:
                  oracle=oracle if len(oracle) >= MIN_PROMPT_CHARS else None,
                  echo_wall=bool(meta.get("echo_wall", False)), root=root, scripture=scripture,
                  env_knows_truth=bool(meta.get("env_knows_truth", False)),
-                 personalities=load_personalities(root) if meta.get("personality", True) else None)
+                 personalities=load_personalities(root) if meta.get("personality", True) else None,
+                 env_temperature=float(meta.get("env_temperature", 1.2)), env_thinking=bool(meta.get("env_thinking", False)),
+                 judge_thinking=bool(meta.get("judge_thinking", JUDGE_THINKING)))

@@ -93,12 +93,12 @@
       el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(ACT_DECO[item.act]));
     } else if (!item.ghost && !haunt && sp) el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(sp.bubble));
     if (item.to && !haunt) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
-    if (!isEnv && item.pid != null) { // 选手的头像：点一下给他点赞 / 点踩，头像下面挂着计数
+    if (!isEnv && !haunt && item.pid != null) { // 点这句话（或头像）给它点赞 / 点踩；头像下面挂着这个人的总数
       const av = el.querySelector('.avatar');
       const col = document.createElement('div');
       col.className = 'av-col';
       av.replaceWith(col);
-      col.append(av, HungerVotes.attach(av, item.pid, item.name));
+      col.append(av, HungerVotes.attach(av, el.querySelector('.bubble'), item.pid, item.mid, item.name));
     }
     Sprites.mount(el);
     return el;
@@ -200,7 +200,7 @@
     el.querySelector('.d-meta').textContent =
       [r.killed_by ? `死于「${r.killed_by}」之手` : '', r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平']
         .filter(Boolean).join(' · ');
-    if (r.votes) el.querySelector('.d-body').append(HungerVotes.badge(r.votes, 'sealed')); // 观众的评价，随死亡封存
+    el.querySelector('.d-body').append(HungerVotes.liveBadge(r.id, r.votes)); // 观众的评价：死后也照样能投，跟着变
     if (item.onOpen) el.addEventListener('click', item.onOpen);
     Sprites.mount(el);
     return el;

@@ -41,9 +41,9 @@
 | `fallback/tribute.md` | 选手 | 世界的 `tribute.md` 还是空的（不到 30 字）时，代替它 | – |
 | `fallback/playground.md` | 环境 | 世界的 `playground.md` 还是空的时，代替它 | – |
 | `player/rules.md` | 选手 | 拼在人设后面：游戏规则、可选的行动、输出格式 | `{options}` 行动列表、`{actions}` 可选的 action 值 |
-| `player/turn.md` | 选手 | 每次轮到他 | `{round}`、`{field}` 场上有谁、`{options}` 本回合可选的行动 |
+| `player/turn.md` | 选手 | 每次轮到他 | `{turn}` 这是他自己的第几轮、`{field}` 场上有谁、`{options}` 本回合可选的行动 |
 | `player/personality.md` | 选手 | 出生时抽到的性格 | `{virtue}` `{virtue_desc}` `{flaw}` `{flaw_desc}` |
-| `player/revived.md` | 选手 | 复活的人：你复活了、前世怎么死的、前世的记忆 | `{name}` `{life}` `{born}` `{died}` `{death}` `{memory}` |
+| `player/revived.md` | 选手 | 复活的人：你复活了、前世怎么死的、前世的记忆 | `{name}` `{life}` `{age}` 前世活了几轮、`{death}` `{memory}` |
 | `player/catgirl.md` `bard.md` `gambler.md` `medium.md` `believer.md` `earthbound.md` `chronicler.md` | 选手 | 稀有身份的设定（拼在性格后面） | – |
 | `player/lover.md` | 选手 | 恋人：你和谁是一对 | `{name}` 恋人的名字 |
 | `player/chronicler.md` | 选手 | 史官的设定 | – |

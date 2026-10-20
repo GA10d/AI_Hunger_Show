@@ -43,7 +43,7 @@ web/
   世界的本质（`truth`）要等有人宣告成功（墓园里出现胜利者）才揭示。内容在后端就被拿掉了，不是前端藏起来的。
   事件流里每次有规则生效还会推一条 `scripture` 事件（页面用它让“圣言”按钮闪一下）。
 - `GET /api/state`：在世的选手（最多两位）、当前轮数、是否在运行、已花费用。前端靠它判断后端在不在；没在运行时舞台直接拉上警戒线（「维修中」）。
-- 观众投票：`POST /api/vote` `{player_id, vote: 1 | -1 | 0, viewer}`（0 = 撤回），每位观众对每位在场选手一票，选手离场后返回 409；`viewer` 是页面存在 localStorage 里的随机 id，同一个地址最多带 6 个 id（429）。`GET /api/votes?viewer=` 返回在场选手的 `tallies` 和这位观众自己的 `mine`。计数变化时事件流推一条**具名**事件 `event: votes`（`{pid: {up, down}}`，不进历史记录），`/api/poll` 的回复里也带 `votes`。不落盘：选手本来就活不过服务器重启，死者的票在墓碑上。
+- 观众投票（按句）：`POST /api/vote` `{player_id, message_id, vote: 1 | -1 | 0, viewer}`（0 = 撤回）。选手的 `message` / `lastwords` / `guess` 都带 `mid`（这一句的编号），每位观众对每一句各有一票；`message_id` 不是这个选手说的话返回 404，同一个地址最多带 6 个 viewer id（429）。`GET /api/votes?viewer=` 返回 `tallies: {players: {pid: {up, down}}, messages: {mid: {up, down}}}`（选手的总数 = 他所有句子之和）和这位观众投过的 `mine: {mid: 1 | -1}`。计数变化时事件流推一条**具名**事件 `event: votes`（同样的 `tallies`，不进历史记录），`/api/poll` 的回复里也带 `votes`。死去的选手照样能投。票存在数据目录的 `votes.json`（重启不丢）；`/api/graveyard` 返回的墓碑带实时的 `votes` / `message_votes`。事件流里的 `votes` 第一次是全部，之后只推变了的；`/api/poll` 带 `votes_after`，回复里的 `votes_version` 下次带回来。
 - `/music/<文件>`：音乐文件（支持 Range，可以随意拖动 / 跳转）。页面里用相对路径 `../music/<文件>` 引用，
   所以从磁盘直接打开、VSCode Live Server（以仓库根目录为根）、python 服务器三种方式都找得到。
 

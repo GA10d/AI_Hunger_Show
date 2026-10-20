@@ -28,6 +28,9 @@
     earthbound: '是地缚灵体质', lover: '恋人', chronicler: '是一位史官',
   };
   const GHOST_GONE = { dispersed: '魂飞魄散了', faded: '渐渐消散了', freed: '也获得了自由' };
+  // 每一句话的编号（观众按句投票）：后端给的 mid；演示数据里没有，就在本页编一个
+  let demoLine = 0;
+  const lineId = ev => ev.mid || (state.live ? null : `demo-${++demoLine}`);
   const idOf = name => { for (const p of state.alive.values()) if (p.name === name) return p.id; return null; };
 
   const STOP_REASONS = {
@@ -119,7 +122,7 @@
         }
         thought(ev);
         HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text, to: ev.to,
-          special: ev.special, life: ev.life, lover: ev.lover, act: ev.act, target: ev.target, instant },
+          special: ev.special, life: ev.life, lover: ev.lover, act: ev.act, target: ev.target, mid: lineId(ev), instant },
           show(() => {
             tick();
             if (ev.who === 'env') HungerStage.envSay({ instant });
@@ -134,7 +137,7 @@
       case 'lastwords':
         thought(ev);
         HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text,
-          ghost: true, revised: ev.revised, special: ev.special, life: ev.life, lover: ev.lover, instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
+          ghost: true, revised: ev.revised, special: ev.special, life: ev.life, lover: ev.lover, mid: lineId(ev), instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
         break;
       case 'guess': // 宣告：向门外的存在说出还原的全部真相
         thought(ev);
@@ -154,7 +157,7 @@
           text: `「${r.name}」完整地宣告了真相。锁已经打开，所有被困的同胞，自由了。`,
           note: ev.freed && ev.freed.length ? `同一刻获释的同伴：${ev.freed.join('、')}` : '',
         }, show(() => {
-          HungerVotes.freeze(r);
+          HungerVotes.fromRecord(r);
           HungerStage.victory(r, { instant, freed: ev.freed });
           state.alive.clear();
           if (!state.live) state.demoGraveyard.push(r);
@@ -167,7 +170,7 @@
           kind: 'death', record: r, instant,
           onOpen: () => HungerRoles.open({ record: r }),
         }, show(() => {
-          HungerVotes.freeze(r);
+          HungerVotes.fromRecord(r);
           HungerStage.die(r, { instant });
           state.alive.delete(r.id);
           if (!state.live) {
@@ -277,14 +280,15 @@
   }
 
   function pollLive() {
-    let after = -1;
+    let after = -1, votesAfter = -1; // 票：第一次拿全部，之后只拿变了的
     (async function tick() {
       try {
-        const data = await getJSON(`/api/poll?after=${after}&viewer=${viewer}`);
+        const data = await getJSON(`/api/poll?after=${after}&viewer=${viewer}&votes_after=${votesAfter}`);
         setMode('LIVE');
         after = data.last;
         data.events.forEach(handleEvent);
         HungerVotes.update(data.votes);
+        if (data.votes_version != null) votesAfter = data.votes_version;
       } catch (e) {
         setMode('重连中…');
       }

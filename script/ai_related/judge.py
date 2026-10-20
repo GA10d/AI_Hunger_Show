@@ -8,8 +8,9 @@ import json
 import warnings
 from dataclasses import dataclass, field
 
+from .agent import _parse_json
 from .client import DeepSeekClient
-from .config import SUMMARY_MODEL
+from .config import JUDGE_THINKING, SUMMARY_MODEL
 from .prompts import DEFAULT, Prompts, fill
 
 
@@ -33,11 +34,16 @@ class OracleResult:
     contradicted: list = field(default_factory=list)
 
 
-def _ask_json(client: DeepSeekClient, system: str, user: str, model: str, what: str, attempts: int = 3):
+def _ask_json(client: DeepSeekClient, system: str, user: str, model: str, what: str, attempts: int = 3,
+              thinking: bool = False):
+    """thinking: let the model reason before it answers (slower and dearer, but it reads long texts more carefully).
+    Its reasoning counts against max_tokens, so the budget is much larger then."""
     messages = [{"role": "system", "content": system}, {"role": "user", "content": user}]
     for _ in range(attempts):
         try:
-            data = json.loads(client.chat(messages, model=model, json_mode=True, max_tokens=900, temperature=0).content)
+            reply = client.chat(messages, model=model, json_mode=True, thinking=thinking,
+                                max_tokens=8192 if thinking else 900, temperature=0)
+            data = _parse_json(reply.content, None)  # tolerates a ```json fence or text after the object
             if isinstance(data, dict):
                 return data
         except ValueError:
@@ -47,15 +53,17 @@ def _ask_json(client: DeepSeekClient, system: str, user: str, model: str, what: 
 
 
 class Judge:
-    def __init__(self, client: DeepSeekClient, rules: str, model: str = SUMMARY_MODEL, prompts: Prompts = DEFAULT):
+    def __init__(self, client: DeepSeekClient, rules: str, model: str = SUMMARY_MODEL, prompts: Prompts = DEFAULT,
+                 thinking: bool = JUDGE_THINKING):
         self.client, self.model = client, model
+        self.thinking = thinking  # think before ruling: a forbidden word buried in a long speech is easy to miss otherwise
         self.system = rules + "\n\n" + prompts.text("judge/judge_format")  # the output format, after the world's judge.md
         self.check_action_text = prompts.text("judge/check_action")
         self.check_round_text = prompts.text("judge/check_round")
         self.round_log_empty = prompts.strings("judge")["round_log_empty"]
 
     def _verdicts(self, user: str, names: set[str]) -> list[Verdict]:
-        data = _ask_json(self.client, self.system, user, self.model, "judge")
+        data = _ask_json(self.client, self.system, user, self.model, "judge", thinking=self.thinking)
         if not data:
             return []  # if the judge cannot answer, nobody is punished
         out = []

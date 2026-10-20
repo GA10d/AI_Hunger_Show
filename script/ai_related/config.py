@@ -11,6 +11,9 @@ BASE_URL = "https://api.deepseek.com"
 DEFAULT_MODEL = "deepseek-flash"
 PRO_MODEL = "deepseek-v4-pro"
 SUMMARY_MODEL = DEFAULT_MODEL
+# The rule judge thinks before it rules (a world can turn it off with "judge_thinking": false in world.json). Without
+# it, a forbidden character buried in a long speech or last words was sometimes missed; costs a few more output tokens.
+JUDGE_THINKING = True
 
 COMPRESS_THRESHOLD_TOKENS = 60_000
 KEEP_RECENT = 12
