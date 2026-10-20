@@ -8,7 +8,7 @@ Mechanics (the *content* of the world lives in words/<world>/, see world.py):
  3. An action is one of:
       speak       - the environment answers, the other player hears it
       last_words  - takes the whole action; never reaches the environment or the other player on the
-                    field; inherited only by the player(s) born next
+                    field; inherited only by the player(s) born next. May be left again: the new one replaces the old
       end_life    - the player ends their own life              (worlds with a judge)
       guess       - the player declares the whole truth of the world; the oracle rules on it at once:
                     wrong -> death, right -> the players win and the game is over   (worlds with an oracle)
@@ -373,13 +373,10 @@ class Game:
 
     # ---- one action --------------------------------------------------------
     def _act(self, p: Player) -> Iterator[dict]:
-        can_last = p.last_words is None
-        data = p.agent.get_json_reply(self._turn_instruction(can_last, p), example=self.P["turn_example"],
+        data = p.agent.get_json_reply(self._turn_instruction(p), example=self.P["turn_example"],
                                       validator=lambda d: _valid_turn(d, self.actions), commit=False,
                                       max_tokens=2048 if "guess" in self.actions else 1024)
         action, content = data["action"], data["content"].strip()
-        if action == "last_words" and not can_last:
-            action = "speak"  # only one set of last words (before the whisper check, so a "to" still makes it a whisper)
         partner = next((q for q in self.players if q is not p), None)
         to = str(data.get("to") or "").strip()
         # a whisper: only for speech, only with a partner on the field, and only if "to" names them
@@ -399,10 +396,11 @@ class Game:
             base["thought"] = thought
 
         if action == "last_words":
-            # Takes the whole action. The environment and the other player never see it.
+            # Takes the whole action. The environment and the other player never see it. A new one replaces the old.
+            revised = p.last_words is not None
             p.last_words = content
             p.log.append(("last_words", content))
-            yield self._emit({"type": "lastwords", "text": content, **base})
+            yield self._emit({"type": "lastwords", "text": content, **base, **({"revised": True} if revised else {})})
         elif action == "guess":
             # A declaration to the world's truth: nobody on the field hears it.
             p.log.append(("guess", content))
@@ -447,10 +445,10 @@ class Game:
         names = "、".join(f"「{q.name}」" for q in others)
         return fill(self.P["field_partner"], count=len(self.players), names=names)
 
-    def _turn_instruction(self, can_last: bool, p: Player) -> str:
-        actions = [a for a in self.actions if a != "last_words" or can_last]
-        options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(actions, 1))
-        options += "\n" + (self.P["turn_remind_last_words"] if can_last else self.P["turn_last_words_used"])
+    def _turn_instruction(self, p: Player) -> str:
+        options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(self.actions, 1))
+        options += "\n" + (fill(self.P["turn_last_words_current"], text=p.last_words) if p.last_words
+                           else self.P["turn_remind_last_words"])
         return fill(self.prompts.text("player/turn"), round=self.round, field=self._field_text(p), options=options)
 
     def _env_say(self) -> Iterator[dict]:
