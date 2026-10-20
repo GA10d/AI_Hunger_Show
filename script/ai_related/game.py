@@ -761,6 +761,21 @@ class Game:
             out.append(item)
         return out
 
+    def specials_view(self) -> dict[str, dict]:
+        """The 特殊角色 page: which rare identities have appeared so far (in the graveyard or on the field), how many
+        times, and who was the first. An identity nobody has had yet stays locked on the page."""
+        out: dict[str, dict] = {}
+        for r in [*self.graveyard, *(p.public() for p in self.players)]:
+            special = r.get("special")
+            if not special:
+                continue
+            e = out.setdefault(special, {"count": 0, "first": None})
+            e["count"] += 1
+            born = r.get("born_round") or 0
+            if e["first"] is None or born < e["first"]["round"]:
+                e["first"] = {"name": r["name"], "avatar": r["avatar"], "round": born}
+        return out
+
     def _match_scripture(self, rule: str) -> list[str]:
         """Which entries a verdict's rule label (e.g. "R1 禁字之规") refers to."""
         return [e["id"] for e in self.scripture if e.get("rule") and e["rule"].casefold() in rule.casefold()]

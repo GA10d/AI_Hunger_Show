@@ -14,6 +14,7 @@ web/
 ├─ js/chat.js          对话区：气泡队列、打字机、遗言气泡（墓碑形）、死亡框、入场分隔条
 ├─ js/roles.js         墓园：墓碑列表 → 人物生平（文件名沿用 roles）
 ├─ js/scripture.js     圣言：这个世界的每一条世界观 + 被触发的次数
+├─ js/info.js          信息：游戏规则（图文简介）/ 特殊角色（出现过才解锁，点开看详细机制）
 ├─ js/music.js         音乐：开关、清单循环播放（清单来自 ../music/playlist.js）
 ├─ js/votes.js         观众投票：点头像弹出 👍 / 👎，头像下面挂计数，所有观众同步
 ├─ js/demo.js          演示数据（没连后端时用）
@@ -35,6 +36,7 @@ web/
   稀有身份的头像 `cat` `bard` `gambler` `medium` `believer` `earthbound` 不在 p0~p7 的随机池里。`lastwords` 改写遗言时带 `revised: true`。猫娘用专属头像 `cat`（不在 p0~p7 的随机池里）。
 - `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at, votes`（`votes = {up, down}`，观众的评价，死亡那一刻封存）。
   `kind`：`natural` 寿命耗尽 / `execution` 违规被处决 / `suicide` 自尽 / `wrong_guess` 宣告错误 / `victory` 胜利（墓园里显示成金星）。
+- `GET /api/specials`：特殊角色页。`{seen: {身份: {count, first: {name, avatar, round}}}, chances: {身份: 概率}}`。`seen` 里没有的身份在页面上是锁着的（只显示稀有度）；身份的说明文字写在 `info.js` 里。
 - `GET /api/scripture`：圣言。`[{id, kind: rule | truth, count, title, text}]`，`count` 是这条规则被触发的次数。
   **还没揭示的条目没有 `title` / `text`，只有 `hidden: true`**（页面显示成「？？？」）：规则在第一次被触发时揭示，
   世界的本质（`truth`）要等有人宣告成功（墓园里出现胜利者）才揭示。内容在后端就被拿掉了，不是前端藏起来的。
@@ -56,7 +58,7 @@ web/
   小人是用头像拼出来的（头 + 身体 + 腿，按姿势 × 表情 × 头像缓存）；`app.js` 在对话气泡**开始显示**的那一刻调用 `HungerStage.spawn / say / think / envSay / lastWords / declare / die / victory / reset`，所以动画和对话同步。
   历史回放（`replay` 或 `?instant`）只还原状态（谁在场、有几块碑），不演动画。`die(record, {variant})` 的 `variant` 可以指定天罚：`spear | hands | burst | chains | rune`，不指定就随机。
   左上角的角标由 `app.js` 的 `setMode` 控制：LIVE（红点闪烁）/ DEMO（琥珀色）/ 断线（灰色）；左下角只写轮数。
-- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言；`?paused` 舞台一直显示「维修中」。
+- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言；`?info=rules|specials` 打开时直接弹出信息；`?paused` 舞台一直显示「维修中」。
 
 ## 适配
 

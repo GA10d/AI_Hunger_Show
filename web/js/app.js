@@ -2,7 +2,7 @@
  *   有后端（http://…/ 且 /api/state 可访问）→ 实时模式，用 SSE 接收事件；
  *   否则（直接双击 index.html）→ 演示模式，播放 demo.js 里的流程。
  * 调试参数：?instant 跳过打字机和入场动画；?demo 强制演示模式；?empty 演示模式下不放对话；
- *           ?roles=list|detail 打开时直接弹出墓园；?scripture 打开时直接弹出圣言；?paused 舞台一直显示「维修中」。 */
+ *           ?roles=list|detail 打开时直接弹出墓园；?scripture 打开时直接弹出圣言；?info=rules|specials 打开时直接弹出信息；?paused 舞台一直显示「维修中」。 */
 (function (global) {
   'use strict';
 
@@ -19,6 +19,7 @@
     alive: new Map(),       // 在世的选手 id -> { id, name, avatar, age }，最多两位
     demoGraveyard: HungerDemo.GRAVEYARD.slice(),
     demoScripture: { ...HungerDemo.SCRIPTURE_COUNTS }, // 演示模式下每条世界观被触发的次数
+    seenSpecials: new Set(), // 已经出现过的稀有身份（第一次出现时让「信息」按钮闪一下）
   };
 
   // 稀有身份入场时，分隔条上的那句话
@@ -92,8 +93,13 @@
             : `第 ${p.id} 位选手「${p.name}」入场${SPECIAL_ENTRY[p.special] ? `（${SPECIAL_ENTRY[p.special]}）` : ''}${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
         }, show(() => {
           state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0, personality: ev.personality || p.personality,
-            special: p.special, life: p.life, lover: p.lover });
+            special: p.special, life: p.life, lover: p.lover, born_round: p.born_round });
           HungerStage.spawn(p, { instant, revived: !!back });
+          // 某种稀有身份第一次出现：「信息」按钮闪一下，「特殊角色」里对应的一条解锁了
+          if (p.special && !state.seenSpecials.has(p.special)) {
+            state.seenSpecials.add(p.special);
+            if (!ev.replay) { pulse('info'); toast(`解锁了新的特殊角色：${HungerInfo.nameOf(p.special)}`); }
+          }
         }));
         // 入场时亮出性格（一个优点 + 一个缺点），再由他自己用一句心里话说说自己是个什么样的人；复活的人、猫娘的卡片各有各的样子
         if (ev.personality || p.special) {
@@ -231,6 +237,7 @@
     scripture: () => HungerScripture.open(),
     music: () => HungerMusic.toggle(),
     graveyard: () => HungerRoles.open(),
+    info: () => HungerInfo.open(),
   };
   document.querySelectorAll('.px-btn[data-action]').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -302,6 +309,19 @@
   const graveyardFromServer = () => getJSON('/api/graveyard');
   const scriptureFromServer = () => getJSON('/api/scripture');
   // 演示模式下自己做和后端一样的事：规则触发过才揭示；世界的本质要等有人宣告成功（墓园里出现胜利者）
+  const specialsFromServer = () => getJSON('/api/specials');
+  // 演示模式：和后端一样，从墓园 + 在场的人里数每种稀有身份出现过几次、谁是第一个
+  const specialsFromDemo = async () => {
+    const seen = {};
+    [...state.demoGraveyard, ...state.alive.values()].forEach(r => {
+      if (!r.special) return;
+      const e = seen[r.special] || (seen[r.special] = { count: 0, first: null });
+      e.count++;
+      const born = r.born_round || 0;
+      if (!e.first || born < e.first.round) e.first = { name: r.name, avatar: r.avatar, round: born };
+    });
+    return { seen, chances: HungerDemo.SPECIAL_CHANCES };
+  };
   const scriptureFromDemo = async () => {
     const solved = state.demoGraveyard.some(r => r.kind === 'victory');
     return HungerDemo.SCRIPTURE.map(e => {
@@ -321,6 +341,10 @@
       current: () => [...state.alive.values()],
     });
     HungerScripture.init({ load: state.live ? scriptureFromServer : scriptureFromDemo });
+    HungerInfo.init({ load: state.live ? specialsFromServer : specialsFromDemo });
+    if (state.live) {
+      try { Object.keys((await specialsFromServer()).seen || {}).forEach(k => state.seenSpecials.add(k)); } catch (e) { /* 读不到也不影响观看 */ }
+    }
     if (state.live) {
       setMode('LIVE');
       if (state.idle) setPaused(true, server.error ? '演出出错，正在抢修' : STOP_REASONS[server.stop_reason] || '演出还没有开始', true);
@@ -335,6 +359,7 @@
     const roles = params.get('roles');
     if (roles) setTimeout(() => HungerRoles.open(roles === 'detail' ? { detail: 0 } : undefined), 400);
     if (params.has('scripture')) setTimeout(() => HungerScripture.open(), 400);
+    if (params.has('info')) setTimeout(() => HungerInfo.open(params.get('info') || 'rules'), 400);
     if (params.has('paused')) setTimeout(() => setPaused(true, '调试：演出暂停'), 400);
   })();
 

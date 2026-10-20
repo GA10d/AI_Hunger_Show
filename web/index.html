@@ -39,8 +39,8 @@
         <button class="px-box px-btn" type="button" data-action="graveyard">
           <span class="sprite" data-sprite="tomb"></span><span class="label">墓园</span>
         </button>
-        <button class="px-box px-btn" type="button" data-action="tip">
-          <span class="sprite" data-sprite="coin"></span><span class="label">打赏</span>
+        <button class="px-box px-btn" type="button" data-action="info">
+          <span class="sprite" data-sprite="info"></span><span class="label">信息</span>
         </button>
       </nav>
     </header>
@@ -72,6 +72,21 @@
     </div>
   </div>
 
+  <!-- 信息：上面两个标签页切换——游戏规则（讲给观众听的）/ 特殊角色（像圣言一样，出现过才解锁） -->
+  <div id="info" class="modal" role="dialog" aria-modal="true" aria-label="信息" hidden>
+    <div class="modal-panel px-box">
+      <header class="modal-head">
+        <button class="px-box px-btn px-btn-s" id="info-back" type="button" hidden>返回</button>
+        <nav class="tabs" role="tablist" aria-label="信息">
+          <button class="tab" type="button" role="tab" data-tab="rules" aria-selected="true">游戏规则</button>
+          <button class="tab" type="button" role="tab" data-tab="specials" aria-selected="false">特殊角色</button>
+        </nav>
+        <button class="px-box px-btn px-btn-s" id="info-close" type="button">关闭</button>
+      </header>
+      <div class="modal-body" id="info-body" role="tabpanel"></div>
+    </div>
+  </div>
+
   <div id="toast" class="toast px-box" role="status" hidden></div>
 
   <!-- 音乐清单（由 python -m ai_related.playlist 生成；服务器每次启动都会重写）。用相对路径，
@@ -83,6 +98,7 @@
   <script src="js/chat.js"></script>
   <script src="js/roles.js"></script>
   <script src="js/scripture.js"></script>
+  <script src="js/info.js"></script>
   <script src="js/music.js"></script>
   <script src="js/demo.js"></script>
   <script src="js/app.js"></script>

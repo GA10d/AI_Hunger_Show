@@ -1178,6 +1178,56 @@ button.hall-card:focus-visible { outline: var(--px) dashed var(--gold); outline-
 .verse.hidden .vtext { color: var(--steel); }
 .verse.hidden .vtag { color: var(--steel); }
 
+/* ---------- 信息：两个标签页（游戏规则 / 特殊角色） ---------- */
+.tabs { flex: 1; display: flex; gap: 8px; min-width: 0; }
+.tab {
+  flex: 1;
+  min-width: 0;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-bottom: var(--px) solid transparent;
+  background: transparent;
+  color: var(--mist);
+  font: 15px/1 var(--font);
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.tab:hover { color: var(--paper); }
+.tab[aria-selected="true"] { color: var(--gold); border-bottom-color: var(--gold); }
+.tab:focus-visible { outline: 2px dashed var(--gold); outline-offset: 2px; }
+.rule-list { display: flex; flex-direction: column; gap: 14px; margin: 0; padding: 0 var(--px); list-style: none; }
+.rule {
+  --fill: #1d2150;
+  --edge: var(--steel);
+  display: grid;
+  grid-template-columns: 112px 1fr;
+  gap: 14px;
+  align-items: center;
+  margin: 0;
+  padding: 12px 14px;
+}
+.r-art { display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; min-height: 48px; }
+.r-art .sprite { width: 36px; height: 36px; }
+.r-title { font-size: 16px; line-height: 1.4; color: var(--gold); }
+.r-text { margin: 4px 0 0; font-size: 14px; line-height: 1.7; color: var(--paper); overflow-wrap: anywhere; }
+.r-echo { padding: 4px 6px; font-size: 12px; color: var(--ink); background: #c9d6e0; white-space: nowrap; }
+.r-echo .blank { display: inline-block; color: #b13e53; box-shadow: 0 0 6px 1px rgba(224, 96, 122, .7); }
+.r-thought, .r-speech { display: block; width: 100%; padding: 3px 6px; font-size: 11px; line-height: 1.5; text-align: left; }
+.r-thought { color: var(--mist); border: 2px dashed var(--steel); }
+.r-speech { color: var(--paper); background: var(--navy); box-shadow: 0 0 0 2px var(--cyan); margin-top: 6px; }
+button.sp-entry { width: 100%; border: 0; color: var(--paper); font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.sp-entry:hover { --edge: var(--paper); }
+button.sp-entry:focus-visible { outline: var(--px) dashed var(--gold); outline-offset: calc(2 * var(--px)); }
+.sp-points { margin: 0; padding-left: 1.2em; display: flex; flex-direction: column; gap: 6px; font-size: 14px; line-height: 1.7; }
+@media (max-width: 430px) {
+  .rule { grid-template-columns: 1fr; gap: 8px; padding: 10px 12px; }
+  .r-art { justify-content: flex-start; min-height: 0; }
+  .r-thought, .r-speech { width: auto; display: inline-block; }
+  .tab { font-size: 14px; }
+}
+
 /* ---------- 音乐开关 / 按钮闪烁 ---------- */
 .px-btn[data-action="music"]:not(.music-on) .sprite { filter: grayscale(1); opacity: .6; }
 .px-btn[data-action="music"]:not(.music-on) .label { color: var(--mist); }

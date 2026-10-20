@@ -126,6 +126,13 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
         """The 圣言 page: every entry of the worldview, with how many times it has been triggered."""
         return game.scripture_view()
 
+    @app.get("/api/specials")
+    def specials():
+        """The 特殊角色 page. seen: {identity: {count, first: {name, avatar, round}}} for every identity that has appeared;
+        chances: how rare each one is (shown even while it is still locked)."""
+        return {"seen": game.specials_view(),
+                "chances": {"revived": game.revive_chance, **game.special_chances, "lover": game.lovers_chance}}
+
     @app.get("/api/graveyard/{player_id}")
     def grave(player_id: int):
         for record in game.graveyard:
