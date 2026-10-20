@@ -6,6 +6,7 @@
  *   HungerVotes.setMine({ pid: 1 | -1 })      // 这位观众自己投过的票（刚连上时从 /api/votes 读）
  *   HungerVotes.freeze(record)                // 死亡 / 胜利：之后不能再投，计数以 record.votes 为准
  *   HungerVotes.tally(pid) / HungerVotes.badge(votes)   // 墓园、人物生平里用
+ * 每有人新投一票（自己的，或别的观众推过来的），屏幕左下角和右下角各飘起几个 👍 / 👎，越飘越淡，直到消失。
  * 演示模式（没有后端）下只在本页记票。 */
 (function (global) {
   'use strict';
@@ -24,6 +25,48 @@
   let popFor = null; // { pid, name, anchor }
 
   const tally = pid => tallies.get(pid) || { up: 0, down: 0 };
+
+  // ---------- 飘起来的拇指 ----------
+  const REDUCED = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const PER_CORNER = 3;  // 每一票，每个角飘几个
+  const MAX_FLOATS = 48; // 同时最多这么多个，票多的时候不至于卡
+  let quietUntil = 0;    // 刚打开页面时收到的是已有的票，不算“有人刚投”
+  const layer = document.createElement('div');
+  layer.className = 'vote-floats';
+  layer.setAttribute('aria-hidden', 'true');
+  const rand = (a, b) => a + Math.random() * (b - a);
+
+  function float(kind, votes = 1) {
+    if (REDUCED || document.hidden || performance.now() < quietUntil) return;
+    const n = Math.min(votes, 4) * PER_CORNER;
+    for (let i = 0; i < n; i++) {
+      for (const side of ['left', 'right']) {
+        if (layer.childElementCount >= MAX_FLOATS) return;
+        const el = document.createElement('span');
+        el.className = `vote-float ${kind}`;
+        el.innerHTML = Sprites.svg(kind === 'up' ? 'thumbUp' : 'thumbDown');
+        el.style[side] = `${Math.round(rand(2, 12))}%`;
+        layer.append(el);
+        const rise = innerHeight * rand(0.45, 0.8);
+        const drift = (side === 'left' ? 1 : -1) * rand(10, 70); // 往屏幕中间飘一点
+        const sway = rand(10, 24) * (Math.random() < 0.5 ? 1 : -1);
+        const tilt = rand(-18, 18);
+        el.animate([
+          { transform: `translate(0, 0) rotate(${tilt}deg) scale(.6)`, opacity: 0 },
+          { transform: `translate(${sway * 0.5}px, ${-rise * 0.12}px) rotate(${-tilt}deg) scale(1)`, opacity: 1, offset: 0.1 },
+          { transform: `translate(${drift * 0.5 - sway}px, ${-rise * 0.5}px) rotate(${tilt}deg)`, opacity: 0.75, offset: 0.5 },
+          { transform: `translate(${drift}px, ${-rise}px) rotate(${-tilt}deg) scale(.9)`, opacity: 0 },
+        ], { duration: rand(2200, 3400), delay: i * 140 + rand(0, 120), easing: 'ease-out', fill: 'backwards' })
+          .finished.then(() => el.remove(), () => el.remove());
+      }
+    }
+  }
+
+  // 计数从 old 变成 v：多出来的票才飘（撤回、改票减少的那一边不飘）
+  function floatDelta(old, v) {
+    if (v.up > old.up) float('up', v.up - old.up);
+    if (v.down > old.down) float('down', v.down - old.down);
+  }
 
   // 「👍3 👎1」：像素拇指 + 数字
   function badge(votes, cls) {
@@ -112,6 +155,7 @@
     tallies.set(pid, v);
     if (next) mine.set(pid, next); else mine.delete(pid);
     render(pid, true);
+    floatDelta(old, v);
     if (!opts.live) return;
     try {
       const r = await fetch('/api/vote', {
@@ -158,6 +202,7 @@
       if (old.up === v.up && old.down === v.down) return;
       tallies.set(pid, { up: v.up, down: v.down });
       render(pid, true);
+      floatDelta(old, v);
     });
   }
 
@@ -178,7 +223,8 @@
 
   function init(o) {
     opts = { ...opts, ...o };
-    document.body.append(pop);
+    quietUntil = performance.now() + 2500;
+    document.body.append(pop, layer);
     Sprites.mount(pop);
     const chat = document.getElementById('chat');
     // 新消息会把对话区往下推：按钮跟着头像走，头像滚出视野才收起
