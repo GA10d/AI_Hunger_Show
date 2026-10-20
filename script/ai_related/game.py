@@ -186,6 +186,8 @@ class Game:
         self.cohab_rounds = 0  # complete rounds in which both players on the field have acted
         self.action_log: list[dict] = []  # actions since the current pair met (shown to the judge)
         self.echoes: list[tuple[str, str]] = []  # the echo wall, newest first: (line, the word rubbed out of it)
+        self._echo_new = 0  # lines carved since the environment last spoke
+        self._echo_all = False  # the environment was just shown the whole wall (a newcomer arrived)
         self.spawned = 0
         self.next_id = max((r["id"] for r in self.graveyard), default=0) + 1
         self.won = False
@@ -291,6 +293,7 @@ class Game:
         note = fill(self.E["newcomers"], names=names, count=len(self.players), everyone=everyone)
         if self.world.echo_wall:
             note += self._echo_text()
+            self._echo_all = True
         self.env.insert_context("user", note, speaker="系统")
         yield from self._env_say()
 
@@ -373,14 +376,14 @@ class Game:
                                       validator=lambda d: _valid_turn(d, self.actions), commit=False,
                                       max_tokens=2048 if "guess" in self.actions else 1024)
         action, content = data["action"], data["content"].strip()
+        if action == "last_words" and not can_last:
+            action = "speak"  # only one set of last words (before the whisper check, so a "to" still makes it a whisper)
         partner = next((q for q in self.players if q is not p), None)
         to = str(data.get("to") or "").strip()
         # a whisper: only for speech, only with a partner on the field, and only if "to" names them
         whisper = bool(partner) and action == "speak" and bool(to) and (partner.name in to or to in ("同伴", "对方"))
         p.fatal_text = content
         thought = data.get("thought", "").strip()  # private: only the audience sees it, never the env, the other player or a judge
-        if action == "last_words" and not can_last:
-            action = "speak"  # only one set of last words
         reply = {"thought": thought, "action": action, "content": content}
         if whisper:
             reply["to"] = partner.name
@@ -454,8 +457,15 @@ class Game:
         for q in self.players:
             q.log.append(("env", text))
             q.agent.insert_context("user", text, speaker=ENV_NAME)
-        yield self._emit({"type": "message", "who": "env", "name": ENV_NAME, "avatar": None, "text": text,
-                          "round": self.round})
+        event = {"type": "message", "who": "env", "name": ENV_NAME, "avatar": None, "text": text, "round": self.round}
+        # the lines the environment was just given to read out, so the page can show the wall itself
+        # (only the line with its "□", never the word that was rubbed out)
+        lines = [line for line, _ in self.echoes]
+        shown = lines if self._echo_all else lines[:self._echo_new]
+        if shown:
+            event["echo"] = {"lines": shown, "new": min(self._echo_new, len(shown))}
+        self._echo_new, self._echo_all = 0, False
+        yield self._emit(event)
 
     # ---- referees ----------------------------------------------------------
     def _state_text(self, completed: bool = False) -> str:
@@ -574,6 +584,7 @@ class Game:
             if echo:
                 self.echoes.insert(0, (echo, erased))
                 del self.echoes[ECHO_MAX:]
+                self._echo_new += 1
             note = fill(self.E["death"], name=p.name) + (fill(self.E["death_scene"], observation=observation) if observation
                                                      else fill(self.E["death_cause"], cause=cause))
             if echo:

@@ -86,6 +86,10 @@
             if (ev.who === 'env') HungerStage.envSay({ instant });
             else HungerStage.say(ev.player_id, { instant, len: ev.text.length });
           }));
+        // 环境刚刚念了回声墙：紧跟着亮出墙上的原文（被抹掉的字只是一个空框）
+        if (ev.echo && ev.echo.lines && ev.echo.lines.length) {
+          HungerChat.add({ kind: 'echo', lines: ev.echo.lines, fresh: ev.echo.new, instant }, show());
+        }
         break;
       case 'lastwords':
         thought(ev);

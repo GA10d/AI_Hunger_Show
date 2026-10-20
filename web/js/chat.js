@@ -4,12 +4,14 @@
  *   HungerChat.add({ kind: 'persona', name, avatar, personality, instant }, onShow)   // 入场时亮出的性格卡：一个优点 + 一个缺点
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
  *   HungerChat.add({ kind: 'sacred', variant: 'guess' | 'deny' | 'grant' | 'freedom', title, text, note, instant }, onShow)
+ *   HungerChat.add({ kind: 'echo', lines, fresh, instant }, onShow)   // 回声墙：环境刚念出的那几行，前 fresh 行是新刻上去的
  *   HungerChat.add({ kind: 'signal' }, onShow)   // 不显示任何东西，只在轮到它时调用 onShow
  * thought = 选手脑子里想的（HungerChat.add({ kind: 'message', who: 'player', thought: true, ... })）：虚线气泡，没有头像，字更快；
  * ghost  = 遗言轮：墓碑形的气泡，烛光、慢速打字；
  * death  = 死亡轮：红黑色的“死亡框”，出现时震一下，点击可以打开这个人的生平；
  * sacred = 宣告 / 审判 / 获释：神圣的拱顶、金光、一个字一个字显现。
  *          guess 是住客的宣告，deny 是被驳回，grant 是通过，freedom 是同胞获释的终章；
+ * echo   = 回声墙：一面砖墙，死者最后说的话一行一行浮现，被抹掉的字是一个闪着红光的空框；
  * instant = 不用打字机效果（回放历史时用）；
  * onShow 在该条开始显示的那一刻调用，用来让“墓园/年龄/轮数”等状态和画面同步。 */
 (function (global) {
@@ -114,6 +116,35 @@
     return el;
   }
 
+  // 回声墙：每行都是死者的原话（LLM 文本），按「□」切开，文字用 textContent，空框单独画
+  function buildEcho(item) {
+    const el = document.createElement('article');
+    el.className = 'echo-wall';
+    el.innerHTML =
+      '<div class="e-head"><span class="sprite" data-sprite="eye"></span><span class="e-title">回声墙</span>' +
+      '<span class="sprite" data-sprite="eye"></span></div><ol class="e-lines"></ol>';
+    const list = el.querySelector('.e-lines');
+    item.lines.forEach((line, i) => {
+      const li = document.createElement('li');
+      li.className = i < (item.fresh || 0) ? 'e-line fresh' : 'e-line';
+      const q = document.createElement('span');
+      q.className = 'e-text';
+      String(line).split('□').forEach((part, j) => {
+        if (j) {
+          const blank = document.createElement('span');
+          blank.className = 'blank';
+          blank.textContent = '□';
+          q.append(blank);
+        }
+        q.append(part);
+      });
+      li.append(q);
+      list.append(li);
+    });
+    Sprites.mount(el);
+    return el;
+  }
+
   function append(el) {
     const stick = nearBottom();
     chat.appendChild(el);
@@ -152,6 +183,23 @@
     if (item.kind === 'divider' || item.kind === 'death' || item.kind === 'persona') {
       append(item.kind === 'death' ? buildDeath(item) : item.kind === 'persona' ? buildPersona(item) : buildDivider(item));
       setTimeout(next, instant ? 0 : (item.kind === 'death' ? 1400 : item.kind === 'persona' ? 900 : 500)); // 死亡后停顿久一点
+      return;
+    }
+    if (item.kind === 'echo') { // 字迹一行一行从墙里浮现出来，新刻上去的那几行最先、最慢
+      const el = buildEcho(item);
+      append(el);
+      const lines = [...el.querySelectorAll('.e-line')];
+      let i = 0;
+      const reveal = () => {
+        if (i >= lines.length) return setTimeout(next, instant ? 0 : 900);
+        const stick = nearBottom();
+        lines[i].classList.add('shown');
+        if (stick) toBottom();
+        const wait = instant || skipTyping ? 0 : lines[i].classList.contains('fresh') ? 1100 : 600;
+        i++;
+        setTimeout(reveal, wait);
+      };
+      reveal();
       return;
     }
     const sacred = item.kind === 'sacred';

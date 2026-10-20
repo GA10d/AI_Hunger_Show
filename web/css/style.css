@@ -399,6 +399,76 @@ body {
 .sacred.freedom .s-head { font-size: 28px; letter-spacing: .5em; text-shadow: 0 0 10px rgba(255, 205, 117, .9); }
 .sacred.freedom .s-head .sprite { width: 36px; height: 36px; }
 
+/* ---------- 回声墙：一面灰白的砖墙，死者最后的话一行一行浮现，被抹掉的字是一个闪红光的空框 ---------- */
+.echo-wall {
+  position: relative;
+  align-self: center;
+  width: min(100%, 620px);
+  margin: 4px 0 8px;
+  padding: 16px 22px 18px;
+  background: var(--steel); /* 边框色 */
+  clip-path: var(--notch);
+  animation: pop .24s steps(3) both;
+}
+.echo-wall::before { /* 墙面：灰白底 + 错缝的砖缝（像素画，不会发糊） */
+  content: "";
+  position: absolute;
+  inset: 4px;
+  clip-path: var(--notch);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='48' height='24' shape-rendering='crispEdges'%3E%3Cg fill='%23a3adb9'%3E%3Crect y='10' width='48' height='2'/%3E%3Crect y='22' width='48' height='2'/%3E%3Crect width='2' height='10'/%3E%3Crect x='24' y='12' width='2' height='10'/%3E%3C/g%3E%3C/svg%3E"),
+    radial-gradient(ellipse 80% 70% at 50% 40%, #d6dce3, #b9c2cc);
+}
+.echo-wall > * { position: relative; }
+.e-head {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  letter-spacing: .3em;
+  color: var(--slate);
+}
+.e-head .sprite { flex: none; width: 24px; height: 24px; }
+.e-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.e-line {
+  padding: 2px 8px;
+  background: rgba(244, 244, 244, .55);
+  color: #4a5468; /* 旧的字迹：褪了色 */
+  font-size: 15px;
+  line-height: 1.7;
+  text-align: center;
+  overflow-wrap: anywhere;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, .6); /* 刻痕 */
+  opacity: 0;
+}
+.e-line.fresh { color: var(--ink); background: rgba(244, 244, 244, .8); font-size: 16px; }
+.e-line .e-text::before { content: "「"; }
+.e-line .e-text::after { content: "」"; }
+.e-line.shown { opacity: 1; animation: emerge .9s steps(6) both; }
+.e-line.fresh.shown { animation-duration: 1.3s; }
+.e-line .blank { /* 被抹掉的字：只留一个空框（字还在 DOM 里，复制时是「□」） */
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin: 0 2px;
+  vertical-align: -.12em;
+  border: 2px solid #b13e53;
+  background: #2a0f1d;
+  color: transparent;
+  overflow: hidden;
+  animation: ember 1.6s steps(2) infinite;
+}
+
 /* 分隔条：入场 / 死亡 */
 .divider {
   display: flex;
@@ -724,7 +794,13 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 @keyframes pulse   { 50% { --edge: var(--gold); } }          /* 世界观被触发：按钮边框闪金色 */
 @keyframes radiance { to { filter: brightness(1.25); } }     /* 通过：光芒起伏 */
 @keyframes twinkle  { 50% { opacity: .15; } }                /* 星尘 */
-@keyframes doom {                                            /* 死亡框：闪白、震动、落定 */
+@keyframes emerge {                                          /* 回声墙：字迹从墙里慢慢浮现 */
+  0%   { opacity: 0; filter: blur(2px); letter-spacing: .4em; }
+  60%  { opacity: .7; }
+  100% { opacity: 1; filter: none; letter-spacing: normal; }
+}
+@keyframes ember   { 50% { box-shadow: 0 0 6px 1px rgba(224, 96, 122, .8); } } /* 空框：暗红地一明一灭 */
+@keyframes doom {                                          /* 死亡框：闪白、震动、落定 */
   0%   { transform: translateX(0); filter: brightness(3) grayscale(1); opacity: 0; }
   10%  { opacity: 1; }
   25%  { transform: translateX(-8px); }
@@ -814,6 +890,8 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 
 @media (prefers-reduced-motion: reduce) {
   .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box,
-  .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot { animation: none; }
+  .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot,
+  .echo-wall, .e-line.shown, .e-line .blank { animation: none; }
 }
-.instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona { animation: none; }
+.instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona,
+.instant .echo-wall, .instant .e-line.shown { animation: none; }
