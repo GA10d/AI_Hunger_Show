@@ -173,6 +173,97 @@ body {
   background: rgba(26, 28, 44, .75);
 }
 
+/* ---------- 演出暂停：警戒线 + 「维修中」的牌子（舞台照常在后面动，只是被封起来了） ---------- */
+.stage-closed {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  overflow: hidden;
+  background: rgba(20, 21, 42, .55);
+  pointer-events: none;
+}
+.stage-closed[hidden] { display: none; }
+.tape { /* 黄底黑字的警戒线，上下两道黑黄斜纹边 */
+  position: absolute;
+  left: -20%;
+  width: 140%;
+  height: 26px;
+  padding: 4px 0;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(-45deg, var(--ink) 0 6px, var(--gold) 6px 12px) top / 100% 4px no-repeat,
+    repeating-linear-gradient(-45deg, var(--ink) 0 6px, var(--gold) 6px 12px) bottom / 100% 4px no-repeat,
+    var(--gold);
+  box-shadow: 0 3px 0 rgba(0, 0, 0, .45);
+}
+.tape span {
+  display: block;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 18px;
+  letter-spacing: .15em;
+  color: var(--ink);
+  animation: tape-roll 14s steps(56) infinite;
+}
+.tape span::before { content: "警戒线 · 禁止入内 · KEEP OUT · 维修中 · 警戒线 · 禁止入内 · KEEP OUT · 维修中 · 警戒线 · 禁止入内 · KEEP OUT · 维修中 · 警戒线 · 禁止入内 · KEEP OUT · 维修中 · "; }
+.tape-a { top: 34%; transform: rotate(-9deg); }
+.tape-b { top: 52%; transform: rotate(7deg); }
+.tape-b span { animation-direction: reverse; }
+.sign { /* 从顶上用两根绳子吊下来的木牌，轻轻晃 */
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 132px;
+  margin-left: -66px;
+  padding-top: 18px;
+  transform-origin: 50% 0;
+  animation: sway 2.4s steps(4) infinite alternate;
+}
+.sign .rope { position: absolute; top: 0; width: 2px; height: 26px; background: var(--mist); }
+.sign .rope.l { left: 22px; transform: rotate(16deg); transform-origin: 50% 0; }
+.sign .rope.r { right: 22px; transform: rotate(-16deg); transform-origin: 50% 0; }
+.sign .rope::before { /* 钉子 */
+  content: "";
+  position: absolute;
+  top: -2px;
+  left: -2px;
+  width: 6px;
+  height: 6px;
+  background: var(--steel);
+}
+.board {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 6px 8px 7px;
+  background: var(--paper);
+  color: #b13e53;
+  box-shadow:
+    0 -4px 0 0 var(--ink), 0 4px 0 0 var(--ink), -4px 0 0 0 var(--ink), 4px 0 0 0 var(--ink),
+    inset 0 0 0 4px var(--orange), 0 8px 0 0 rgba(0, 0, 0, .4);
+}
+.board b { font-size: 24px; line-height: 1.2; font-weight: normal; letter-spacing: .2em; margin-right: -.2em; }
+.board small { font-size: 11px; line-height: 1.4; color: var(--slate); text-align: center; overflow-wrap: anywhere; }
+.stage-closed .cone { position: absolute; bottom: 4px; width: 36px; height: 36px; }
+.stage-closed .cone.l { left: 22%; }
+.stage-closed .cone.r { right: 22%; }
+.stage-tag { z-index: 4; } /* 封起来了也看得到轮数 */
+/* 封起来的那一下：警戒线从两边拉过来，牌子掉下来晃两下 */
+.stage-closed.closing .tape-a { animation: tape-in-a .5s steps(5) both; }
+.stage-closed.closing .tape-b { animation: tape-in-b .5s steps(5) .15s both; }
+.stage-closed.closing .sign { animation: sign-drop .7s steps(7) .35s both, sway 2.4s steps(4) 1.05s infinite alternate; }
+@keyframes tape-roll { to { transform: translateX(-50%); } }
+@keyframes sway { from { transform: rotate(-2.5deg); } to { transform: rotate(2.5deg); } }
+@keyframes tape-in-a { from { transform: translateX(-110%) rotate(-9deg); } }
+@keyframes tape-in-b { from { transform: translateX(110%) rotate(7deg); } }
+@keyframes sign-drop {
+  0%   { transform: translateY(-120%); }
+  60%  { transform: translateY(6%) rotate(5deg); }
+  80%  { transform: rotate(-3deg); }
+  100% { transform: none; }
+}
+
 .menu {
   display: grid;
   grid-template-columns: repeat(2, var(--btn));
@@ -829,6 +920,10 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 
 /* 手机宽度（≤430px）：墓园条目的石碑和头像占两行，名字/死因在上，存活轮数在下，给文字让出宽度 */
 @media (max-width: 430px) {
+  .sign { width: 108px; margin-left: -54px; padding-top: 14px; }
+  .board b { font-size: 18px; }
+  .board small { font-size: 10px; }
+  .stage-closed .cone { width: 24px; height: 24px; }
   .d-title { font-size: 16px; letter-spacing: .02em; }
   .sacred { padding: 44px 16px 22px; }
   .sacred .text { font-size: 16px; }
@@ -892,6 +987,7 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
   .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box,
   .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot,
   .echo-wall, .e-line.shown, .e-line .blank { animation: none; }
+  .tape span, .sign, .stage-closed.closing .tape-a, .stage-closed.closing .tape-b, .stage-closed.closing .sign { animation: none; }
 }
 .instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona,
 .instant .echo-wall, .instant .e-line.shown { animation: none; }

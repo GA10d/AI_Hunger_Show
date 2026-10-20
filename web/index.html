@@ -15,6 +15,17 @@
         <canvas id="stage-canvas" width="160" height="68"></canvas>
         <span class="live-badge" id="live-badge" data-state="off"><i class="dot"></i><b class="txt">LIVE</b></span>
         <span class="stage-tag" id="stage-tag"></span>
+        <!-- 演出暂停：两条警戒线把舞台封起来，中间挂一块「维修中」的牌子 -->
+        <div class="stage-closed" id="stage-closed" hidden>
+          <div class="tape tape-a"><span></span></div>
+          <div class="tape tape-b"><span></span></div>
+          <div class="sign" role="status">
+            <i class="rope l"></i><i class="rope r"></i>
+            <div class="board"><b>维修中</b><small id="stage-closed-why">演出暂停</small></div>
+          </div>
+          <span class="sprite cone l" data-sprite="cone"></span>
+          <span class="sprite cone r" data-sprite="cone"></span>
+        </div>
       </section>
 
       <!-- 2×2 按钮：“墓园”会弹出墓园，其余先占位 -->

@@ -231,6 +231,20 @@
       '............',
       '............',
     ],
+    cone: [ // 维修中：路障锥
+      '.....kk.....',
+      '....kook....',
+      '....kook....',
+      '...kwwwwk...',
+      '...kwwwwk...',
+      '..kooooook..',
+      '..kooooook..',
+      '.kwwwwwwwwk.',
+      '.kwwwwwwwwk.',
+      '.koooooooook',
+      'kkkkkkkkkkkk',
+      'knnnnnnnnnnk',
+    ],
   };
 
   const AVATARS = AVATAR_STYLES.map(([tpl, map], i) => {

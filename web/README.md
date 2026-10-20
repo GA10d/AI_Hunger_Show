@@ -34,7 +34,7 @@ web/
   **还没揭示的条目没有 `title` / `text`，只有 `hidden: true`**（页面显示成「？？？」）：规则在第一次被触发时揭示，
   世界的本质（`truth`）要等有人宣告成功（墓园里出现胜利者）才揭示。内容在后端就被拿掉了，不是前端藏起来的。
   事件流里每次有规则生效还会推一条 `scripture` 事件（页面用它让“圣言”按钮闪一下）。
-- `GET /api/state`：在世的选手（最多两位）、当前轮数、是否在运行、已花费用。前端靠它判断后端在不在。
+- `GET /api/state`：在世的选手（最多两位）、当前轮数、是否在运行、已花费用。前端靠它判断后端在不在；没在运行时舞台直接拉上警戒线（「维修中」）。
 - `/music/<文件>`：音乐文件（支持 Range，可以随意拖动 / 跳转）。页面里用相对路径 `../music/<文件>` 引用，
   所以从磁盘直接打开、VSCode Live Server（以仓库根目录为根）、python 服务器三种方式都找得到。
 
@@ -50,7 +50,7 @@ web/
   小人是用头像拼出来的（头 + 身体 + 腿，按姿势 × 表情 × 头像缓存）；`app.js` 在对话气泡**开始显示**的那一刻调用 `HungerStage.spawn / say / think / envSay / lastWords / declare / die / victory / reset`，所以动画和对话同步。
   历史回放（`replay` 或 `?instant`）只还原状态（谁在场、有几块碑），不演动画。`die(record, {variant})` 的 `variant` 可以指定天罚：`spear | hands | burst | chains | rune`，不指定就随机。
   左上角的角标由 `app.js` 的 `setMode` 控制：LIVE（红点闪烁）/ DEMO（琥珀色）/ 断线（灰色）；左下角只写轮数。
-- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言。
+- **调试参数**：`?instant` 跳过打字机效果和入场动画；`?demo` 强制演示模式；`?empty` 演示模式下不放对话；`?roles=list|detail` 打开时直接弹出墓园；`?scripture` 打开时直接弹出圣言；`?paused` 舞台一直显示「维修中」。
 
 ## 适配
 

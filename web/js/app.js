@@ -2,7 +2,7 @@
  *   有后端（http://…/ 且 /api/state 可访问）→ 实时模式，用 SSE 接收事件；
  *   否则（直接双击 index.html）→ 演示模式，播放 demo.js 里的流程。
  * 调试参数：?instant 跳过打字机和入场动画；?demo 强制演示模式；?empty 演示模式下不放对话；
- *           ?roles=list|detail 打开时直接弹出墓园；?scripture 打开时直接弹出圣言。 */
+ *           ?roles=list|detail 打开时直接弹出墓园；?scripture 打开时直接弹出圣言；?paused 舞台一直显示「维修中」。 */
 (function (global) {
   'use strict';
 
@@ -39,13 +39,28 @@
     renderTag();
   }
 
+  // ---------- 演出暂停：舞台拉上警戒线，挂出「维修中」 ----------
+  const closedEl = document.getElementById('stage-closed');
+  const closedWhyEl = document.getElementById('stage-closed-why');
+  function setPaused(on, why, instant) {
+    if (!on && params.has('paused')) return; // 调试参数 ?paused：一直封着
+    if (on && why) closedWhyEl.textContent = why;
+    if (closedEl.hidden === !on) return;
+    closedEl.hidden = !on;
+    closedEl.classList.toggle('closing', on && !instant && !INSTANT);
+  }
+  const PAUSING = new Set(['stop', 'error']);
+
   // ---------- 事件 → 画面 ----------
   // 状态（在世的人、墓园、轮数）放在 onShow 里更新，这样墓园和对话区的进度一致，不会剧透
   function handleEvent(ev) {
     const instant = INSTANT || !!ev.replay;
+    if (!ev.replay) state.idle = false; // 有实时事件进来，说明服务器正在跑
     const show = fn => () => {
       if (ev.session != null && ev.session !== state.session) { state.session = ev.session; state.alive.clear(); HungerStage.reset(); }
       if (ev.round != null) { state.round = ev.round; renderTag(); }
+      // 暂停之后又有新的动静：演出恢复了，撤掉警戒线（回放历史时，服务器眼下没在跑就不撤）
+      if (!PAUSING.has(ev.type) && !(ev.replay && state.idle)) setPaused(false);
       if (fn) fn();
     };
     const tick = () => {
@@ -142,11 +157,13 @@
       case 'stop':
         HungerChat.add({ kind: 'divider', icon: ev.reason === 'victory' ? 'star' : 'eye', instant,
           text: ev.reason === 'victory' ? `演出结束（${STOP_REASONS.victory}）`
-            : `演出暂停（${STOP_REASONS[ev.reason] || ev.reason}）` }, show());
+            : `演出暂停（${STOP_REASONS[ev.reason] || ev.reason}）` },
+        show(() => { if (ev.reason !== 'victory') setPaused(true, STOP_REASONS[ev.reason] || '演出暂停', instant); }));
         break;
       case 'error':
         console.error('[game]', ev.message);
-        HungerChat.add({ kind: 'divider', icon: 'eye', instant, text: `演出出错：${ev.message}` }, show());
+        HungerChat.add({ kind: 'divider', icon: 'eye', instant, text: `演出出错：${ev.message}` },
+          show(() => setPaused(true, '演出出错，正在抢修', instant)));
         break;
     }
   }
@@ -186,7 +203,8 @@
   async function detectLive() {
     if (!/^https?:$/.test(location.protocol) || params.has('demo')) return false;
     try {
-      return (await fetch('/api/state', { cache: 'no-store' })).ok;
+      const r = await fetch('/api/state', { cache: 'no-store' });
+      return r.ok ? await r.json() : false;
     } catch (e) {
       return false;
     }
@@ -242,7 +260,9 @@
 
   (async function start() {
     Sprites.mount(document);
-    state.live = await detectLive();
+    const server = await detectLive();
+    state.live = !!server;
+    state.idle = !!server && !server.running;
     HungerRoles.init({
       graveyard: state.live ? graveyardFromServer : async () => state.demoGraveyard.slice(),
       current: () => [...state.alive.values()],
@@ -250,6 +270,7 @@
     HungerScripture.init({ load: state.live ? scriptureFromServer : scriptureFromDemo });
     if (state.live) {
       setMode('LIVE');
+      if (state.idle) setPaused(true, server.error ? '演出出错，正在抢修' : STOP_REASONS[server.stop_reason] || '演出还没有开始', true);
       connectLive();
     } else {
       setMode('DEMO');
@@ -258,6 +279,7 @@
     const roles = params.get('roles');
     if (roles) setTimeout(() => HungerRoles.open(roles === 'detail' ? { detail: 0 } : undefined), 400);
     if (params.has('scripture')) setTimeout(() => HungerScripture.open(), 400);
+    if (params.has('paused')) setTimeout(() => setPaused(true, '调试：演出暂停'), 400);
   })();
 
   global.HungerUI = { handleEvent, toast, state };
