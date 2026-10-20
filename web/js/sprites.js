@@ -347,6 +347,20 @@
       '....knnk....',
       '..kknnnnkk..',
     ],
+    chronicler: [ // 史官：两边带翅的黑色乌纱帽，深蓝官袍
+      '...kkkkkk...',
+      'kk.knnnnk.kk',
+      'kkkknnnnkkkk',
+      '.kqqqqqqqqk.',
+      'ykqwwqqwwqky',
+      'ykqwkqqwkqky',
+      '.kqqqqqqqqk.',
+      '.kqqkkkkqqk.',
+      '.kqqqqqqqqk.',
+      '.kkkkkkkkkk.',
+      '....kddk....',
+      '..kkddddkk..',
+    ],
     dice: [ // 赌徒的骰子
       '.kkkkkkk.',
       'kwwwwwwwk',
@@ -505,6 +519,7 @@
   // 稀有身份的专属头像不在随机分配的 p0~p7 里，各有各的主色
   const SPECIAL_ACCENTS = {
     cat: '#f7a8d0', bard: '#e0607a', gambler: '#38b764', medium: '#c28cd9', believer: '#e8d5a3', earthbound: '#73eff7',
+    chronicler: '#e8c170',
   };
 
   function accent(id) {

@@ -35,6 +35,7 @@ SPECIAL_CHANCES = {
     "gambler": 0.01,     # bets their lifespan at birth
     "medium": 0.01,      # sees the outline of the words rubbed out on the echo wall
     "believer": 0.01,    # worships the environment
+    "chronicler": 0.01,  # 史官: reads the last 10 last words; their own last words reach the next 10 born
 }
 LOVERS_CHANCE = 0.05   # two players born at the same moment are lovers
 

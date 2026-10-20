@@ -40,6 +40,8 @@
     medium: { tag: '通灵者', sub: () => '看得见回声墙上被抹掉的字的轮廓', bubble: [['eye', 'tr']], card: [['eye', 'tr']] },
     believer: { tag: '信徒', sub: () => '把「环境」当作神明来崇拜', bubble: [['candle', 'tr']], card: [['candle', 'tl'], ['candle', 'tr']] },
     earthbound: { tag: '地缚灵体质', sub: () => '死后不会离开，会化作地缚灵在这里徘徊', bubble: [['chain', 'b']], card: [['chain', 'b']] },
+    chronicler: { tag: '史官', sub: () => '读过前人留下的 10 条遗言；他的遗言会传给之后出生的 10 个人',
+      bubble: [['scroll', 'tr']], card: [['scroll', 'tl'], ['scroll', 'tr']] },
     lover: { tag: '恋人', sub: it => (it.lover ? `和「${it.lover}」是一对恋人` : '命中注定的那个人，同时降生在这里'),
       bubble: [['heart', 'tl'], ['heart', 'tr']], card: [['heart', 'tl'], ['heart', 'tr']] },
   };
@@ -78,7 +80,8 @@
     const who = item.special === 'revived' && item.life ? `${item.name} · 第 ${item.life} 世`
       : item.special === 'lover' && item.lover && !item.to ? `${item.name} ♥ ${item.lover}` : item.name;
     el.querySelector('.name').textContent = haunt ? `${item.name}（地缚灵）→ ${item.to} · 低语`
-      : item.ghost ? `† ${who} · ${item.revised ? '改写遗言' : '遗言'} †` : item.to ? `${who} → ${item.to}（悄悄话）` : who;
+      : item.ghost ? `† ${who} · ${item.revised ? '改写' : ''}${item.special === 'chronicler' ? '史官的遗言' : '遗言'} †`
+      : item.to ? `${who} → ${item.to}（悄悄话）` : who;
     const sp = SPECIALS[item.special];
     if (!item.ghost && !haunt && sp) el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(sp.bubble));
     if (item.to && !haunt) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应

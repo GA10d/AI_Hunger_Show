@@ -25,7 +25,7 @@
   // 稀有身份入场时，分隔条上的那句话
   const SPECIAL_ENTRY = {
     catgirl: '是一只猫娘！', bard: '是一位吟游诗人', gambler: '是一个赌徒', medium: '是一位通灵者', believer: '是一位信徒',
-    earthbound: '是地缚灵体质', lover: '恋人',
+    earthbound: '是地缚灵体质', lover: '恋人', chronicler: '是一位史官',
   };
   const GHOST_GONE = { dispersed: '魂飞魄散了', faded: '渐渐消散了', freed: '也获得了自由' };
   const idOf = name => { for (const p of state.alive.values()) if (p.name === name) return p.id; return null; };
@@ -90,7 +90,7 @@
         HungerChat.add({
           kind: 'divider', icon: back ? 'star' : 'heart', instant,
           text: back ? `「${p.name}」复活了！第 ${back.life} 世${ev.inherited_last_words ? '，带着前人的遗言' : ''}`
-            : `第 ${p.id} 位选手「${p.name}」入场${SPECIAL_ENTRY[p.special] ? `（${SPECIAL_ENTRY[p.special]}）` : ''}${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
+            : `第 ${p.id} 位选手「${p.name}」入场${SPECIAL_ENTRY[p.special] ? `（${SPECIAL_ENTRY[p.special]}）` : ''}${ev.inherited_last_words ? '，带着前人的遗言' : ''}${(ev.legacies || []).map(n => `，带着史官「${n}」的遗言`).join('')}`,
         }, show(() => {
           state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0, personality: ev.personality || p.personality,
             special: p.special, life: p.life, lover: p.lover, born_round: p.born_round });

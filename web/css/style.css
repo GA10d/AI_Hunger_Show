@@ -711,11 +711,12 @@ body {
 .chip.believer { background: #f4f4f4; }
 .chip.earthbound { background: #73eff7; }
 .chip.lover { background: #ff9ab0; }
+.chip.chronicler { background: #e8c170; }
 /* 角上的小装饰：.d-<像素图> 决定大小，.at-<位置> 决定钉在哪个角 */
 .deco { position: absolute; z-index: 1; pointer-events: none; width: 16px; height: 16px; }
 .deco.d-holyCross { width: 14px; height: 18px; }
 .deco.d-dice { width: 18px; height: 18px; }
-.deco.d-coin, .deco.d-note, .deco.d-candle, .deco.d-eye, .deco.d-heart { width: 24px; height: 24px; }
+.deco.d-coin, .deco.d-note, .deco.d-candle, .deco.d-eye, .deco.d-heart, .deco.d-scroll { width: 24px; height: 24px; }
 .deco.d-chain { width: 30px; height: 12px; }
 .deco.at-tl { left: -9px; top: -11px; }
 .deco.at-tr { right: -9px; top: -11px; }
@@ -849,6 +850,16 @@ body {
 .msg.sp-lover .bubble.px-box, .persona.lover { --edge: #ff9ab0; }
 .msg.sp-lover:not(.whisper) .bubble.px-box { --fill: #3a2236; }
 .msg.sp-lover .bubble .name, .persona.lover .p-title { color: #ff9ab0; }
+
+/* 史官：深蓝的官袍色、旧纸一样的金边，角上一卷书；他的遗言板是一块金色的碑，写着「史官的遗言」 */
+.msg.sp-chronicler .bubble.px-box, .persona.chronicler { --edge: #e8c170; --fill: #1b2240; }
+.msg.sp-chronicler .bubble .name, .persona.chronicler .p-title { color: #e8c170; }
+.msg.sp-chronicler .tomb-bubble { background: #e8c170; }
+.msg.sp-chronicler .tomb-bubble::before {
+  background: repeating-linear-gradient(to bottom, rgba(232, 193, 112, .08) 0 2px, transparent 2px 8px), #2b2440;
+}
+.msg.sp-chronicler .epitaph-head { color: #e8c170; letter-spacing: .1em; }
+.msg.sp-chronicler .tomb-bubble .text { color: #f3e2b4; text-shadow: 0 -2px 0 #14102a, 0 2px 0 #8a6a2a; }
 
 /* 地缚灵的低语：死者的头像飘着，半透明的虚线框 */
 .msg.sp-haunt .avatar { --edge: var(--steel); animation: float 2.4s steps(4) infinite; }

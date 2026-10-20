@@ -137,7 +137,7 @@
   ];
 
   // 稀有身份的概率（和 script/ai_related/config.py 一致，「特殊角色」页上锁着的条目也显示稀有度）
-  const SPECIAL_CHANCES = { revived: 0.02, catgirl: 0.02, bard: 0.01, earthbound: 0.01, gambler: 0.01, medium: 0.01, believer: 0.01, lover: 0.05 };
+  const SPECIAL_CHANCES = { revived: 0.02, catgirl: 0.02, bard: 0.01, earthbound: 0.01, gambler: 0.01, medium: 0.01, believer: 0.01, chronicler: 0.01, lover: 0.05 };
 
   global.HungerDemo = { GRAVEYARD, EVENTS, SCRIPTURE, SCRIPTURE_COUNTS, VOTES, SPECIAL_CHANCES };
 })(window);

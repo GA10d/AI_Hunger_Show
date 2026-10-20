@@ -24,6 +24,8 @@ Mechanics (the *content* of the world lives in words/<world>/, see world.py):
       catgirl, bard, believer   - only a way of speaking and acting
       gambler                   - bets their own lifespan at birth: won = 1.5x, lost = 0.5x
       medium                    - sees the outline (strokes, structure, radical) of every word rubbed out on the echo wall
+      chronicler (史官)         - reads the last words of the last CHRONICLE_READ dead at birth; their own last words reach
+                                  the first CHRONICLE_PASS players born after their death, not just the next one
       earthbound                - does not leave at death: haunts the field as a ghost that now and then whispers one line
                                   to the living (judged like anything else: a forbidden word disperses it)
     Two players born at the same moment may be lovers (LOVERS_CHANCE): when one dies, the other gets one last action
@@ -56,7 +58,9 @@ ECHO_MAX = 5  # how many dead players' last lines the echo wall shows
 AVATARS = [f"p{i}" for i in range(8)]  # must match the avatars in web/js/sprites.js
 # rare identities with a face of their own (also in sprites.js), never drawn for anyone else
 SPECIAL_AVATARS = {"catgirl": "cat", "bard": "bard", "gambler": "gambler", "medium": "medium", "believer": "believer",
-                   "earthbound": "earthbound"}
+                   "earthbound": "earthbound", "chronicler": "chronicler"}
+CHRONICLE_READ = 10  # a chronicler reads the last words of this many of the most recent dead...
+CHRONICLE_PASS = 10  # ...and their own last words reach this many of those born after them
 GHOST_EVERY = 3  # an earthbound ghost whispers every this many rounds...
 GHOST_MAX = 4  # ...this many times at most...
 GHOST_ROUNDS = 12  # ...and fades away after this many rounds
@@ -398,10 +402,16 @@ class Game:
             agent.insert_context("system", self.prompts.text(f"player/{special}"), pinned=True)
         if past:
             agent.insert_context("system", self._revival_prompt(past), pinned=True)
+        if special == "chronicler":
+            agent.insert_context("system", self._chronicle(), pinned=True)
         inherited = bool(pred and pred.get("last_words")) and not (past and pred["id"] == past["id"])
         if inherited:  # only the player who died right before this birth hands anything down
             agent.insert_context("system", fill(self.P["inherited_last_words"], name=pred["name"], text=pred["last_words"]),
                                  pinned=True)
+        legacies = [r for r in self._legacies() if not (inherited and r["id"] == pred["id"])]
+        for r in legacies:  # a chronicler's last words reach more than the next newcomer
+            agent.insert_context("system", fill(self.P["chronicler_legacy"], name=r["name"], text=r["last_words"],
+                                                count=CHRONICLE_PASS), pinned=True)
         if past:  # the same name and face as before: nothing new to pick
             name, avatar = past["name"], past["avatar"]
             intro = self._intro(agent, self.P["revived_intro"])
@@ -429,10 +439,29 @@ class Game:
                                 "kind": past.get("kind")}
         if gamble:
             event["gamble"] = gamble
+        if legacies:
+            event["legacies"] = [r["name"] for r in legacies]
         yield self._emit(event)
         if special == "medium":  # opens their eyes on the wall as it is now
             yield from self._medium_vision(player, [(line, w) for line, w in self.echoes if w])
         return player
+
+    # ---- the chronicler (史官) ------------------------------------------------
+    def _chronicle(self) -> str:
+        """What a chronicler reads at birth: the last words of the most recent dead, newest first."""
+        P = self.P
+        recs = [r for r in reversed(self.graveyard) if r.get("last_words")][:CHRONICLE_READ]
+        items = "\n".join(fill(P["chronicler_item"], name=r["name"], round=r.get("died_round", "?"), text=r["last_words"])
+                          for r in recs)
+        return fill(self.prompts.text("player/chronicler_archive"), count=len(recs), items=items or P["chronicler_none"])
+
+    def _legacies(self) -> list[dict]:
+        """Chroniclers' last words still on their way: each reaches the first CHRONICLE_PASS players born after its
+        writer died. Counted from the graveyard and the field, so it survives a restart."""
+        born = [r.get("born_round") or 0 for r in self.graveyard] + [q.born_round for q in self.players]
+        return [r for r in self.graveyard
+                if r.get("special") == "chronicler" and r.get("last_words")
+                and sum(b > (r.get("died_round") or 0) for b in born) < CHRONICLE_PASS]
 
     # ---- the medium: the outline of a rubbed-out word ------------------------
     def _outline(self, word: str) -> str:

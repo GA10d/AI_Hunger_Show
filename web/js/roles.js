@@ -55,7 +55,7 @@
 
   // 稀有身份的标签：复活过的人标着「第几世」（金色），其他身份各有颜色
   const SPECIAL_TAGS = { catgirl: ['cat', '猫娘'], bard: ['bard', '吟游诗人'], gambler: ['gambler', '赌徒'], medium: ['medium', '通灵者'],
-    believer: ['believer', '信徒'], earthbound: ['earthbound', '地缚灵'], lover: ['lover', '恋人'] };
+    believer: ['believer', '信徒'], earthbound: ['earthbound', '地缚灵'], lover: ['lover', '恋人'], chronicler: ['chronicler', '史官'] };
   function specialChip(r) {
     if (r.special === 'revived') return el('span', 'chip holy', `第 ${r.life || 2} 世`);
     const t = SPECIAL_TAGS[r.special];
@@ -220,7 +220,7 @@
     }
     art.append(head, ...traits,
       el('h3', null, '生平'), el('p', 'bio-text', r.biography),
-      el('h3', null, '遗言'),
+      el('h3', null, r.special === 'chronicler' ? '史官的遗言（传给了之后出生的 10 个人）' : '遗言'),
       r.last_words ? el('p', 'last-words', `「${r.last_words}」`) : el('p', 'empty', '没来得及留下遗言。'));
     body.replaceChildren(art);
     Sprites.mount(body);

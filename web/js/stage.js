@@ -295,6 +295,7 @@
     const a = find(id);
     if (!a || REDUCED || o.instant) return;
     settle(a);
+    if (a.special === 'chronicler') emote(a, 'note', 1600); // 史官提笔
     a.mode = 'lastwords'; a.modeUntil = now() + 4200; a.target = null; a.expr = 'sad'; a.exprUntil = a.modeUntil;
     candles.push({ x: a.x + (a.dir > 0 ? 15 : -15), until: a.modeUntil + 800, actor: a });
     eyeLook = a.x;

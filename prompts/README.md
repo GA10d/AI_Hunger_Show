@@ -44,8 +44,10 @@
 | `player/turn.md` | 选手 | 每次轮到他 | `{round}`、`{field}` 场上有谁、`{options}` 本回合可选的行动 |
 | `player/personality.md` | 选手 | 出生时抽到的性格 | `{virtue}` `{virtue_desc}` `{flaw}` `{flaw_desc}` |
 | `player/revived.md` | 选手 | 复活的人：你复活了、前世怎么死的、前世的记忆 | `{name}` `{life}` `{born}` `{died}` `{death}` `{memory}` |
-| `player/catgirl.md` `bard.md` `gambler.md` `medium.md` `believer.md` `earthbound.md` | 选手 | 稀有身份的设定（拼在性格后面） | – |
+| `player/catgirl.md` `bard.md` `gambler.md` `medium.md` `believer.md` `earthbound.md` `chronicler.md` | 选手 | 稀有身份的设定（拼在性格后面） | – |
 | `player/lover.md` | 选手 | 恋人：你和谁是一对 | `{name}` 恋人的名字 |
+| `player/chronicler.md` | 选手 | 史官的设定 | – |
+| `player/chronicler_archive.md` | 选手 | 史官出生时读到的遗言档案 | `{count}` `{items}` |
 | `medium/system.md` `medium/request.md` | 字形学者 | 给通灵者描述被抹掉的字的轮廓（不许写出这个字） | `{word}` |
 | `medium/strings.json` | 通灵者 | 他看见轮廓时收到的话 | 见各条 |
 | `player/strings.json` | 选手 | 取名、内心独白、继承遗言、同伴入场 / 死亡通知、悄悄话、行动说明 | 见各条 |
