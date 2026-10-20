@@ -11,7 +11,8 @@
  *     通灵者看见轮廓时额前紫光一闪；地缚灵体质的人身边飘着青色的游丝；
  *   - 恋人：两人之间连着一根红线，时不时冒出小心心；一个死去，另一个殉情时洒下红色的心；
  *   - 地缚灵：死后半透明的灵魂留在舞台上飘着，低语时飘到那个活人身边；魂飞魄散时炸成碎光，消散时慢慢变淡。
- *   HungerStage.lovers(idA, idB)  .vision(id)  .haunt(player)  .ghostWhisper(ghostId, targetId)  .ghostGone(ghostId, reason)
+ *   - 下杀手：凶手扑到同伴身边，同伴一震、红光一闪、跪倒，灵魂升起；
+ *   HungerStage.attack(killerId, victimId)  .lovers(idA, idB)  .vision(id)  .haunt(player)  .ghostWhisper(ghostId, targetId)  .ghostGone(ghostId, reason)
  * canvas 的逻辑分辨率跟随容器：取整数放大倍数 s，逻辑尺寸 = 容器尺寸 / s，像素始终是整数倍放大。
  *
  *   HungerStage.spawn(player, {instant})   .say(id, {len})   .think(id)   .envSay()   .lastWords(id)
@@ -276,6 +277,16 @@
     eyeLook = a.x;
   }
 
+  function attack(id, targetId, o = {}) { // 下杀手：扑到同伴身边，举起手
+    const a = find(id), b = targetId != null && find(targetId);
+    if (!a || !b || o.instant || REDUCED) return;
+    settle(a);
+    a.mode = 'attack'; a.modeUntil = now() + 1600; a.target = b.x + (b.x > a.x ? -9 : 9); a.dir = b.x >= a.x ? 1 : -1;
+    face(a, 'sad', 1600); emote(a, 'excl', 900);
+    if (b.mode === 'idle') { b.target = null; b.wait = 1600; }
+    face(b, 'surprised', 1400); emote(b, 'excl', 1000);
+  }
+
   function think(id, o = {}) {
     const a = find(id);
     if (!a || o.instant || a.mode === 'lastwords' || a.mode === 'declare' || arriving(a)) return;
@@ -458,6 +469,13 @@
         case 'revive':
           updateRevive(a, t, el);
           break;
+        case 'attack': {
+          const dx = a.target - a.x;
+          if (Math.abs(dx) > 1) { a.x += Math.sign(dx) * Math.min(Math.abs(dx), SPEED * 5 * dt / 1000); a.pose = Math.floor(t / 90) % 2 ? 'walkA' : 'walkB'; }
+          else a.pose = 'armsUp';
+          if (t >= a.modeUntil) { a.mode = 'idle'; a.wait = 800; a.target = null; }
+          break;
+        }
         case 'speak':
           a.pose = a.special === 'believer' ? 'kneel' : 'idle'; // 信徒跪着祷告
           a.expr = Math.floor(t / 150) % 2 ? 'talk' : 'normal'; a.exprUntil = t + 50;
@@ -594,6 +612,22 @@
         beams = beams.filter(b => b.actor !== a);
       }
       if (el > 1800) endDying(a, t);
+    } else if (k === 'murdered') { // 被杀害：一震，红光一闪，跪倒，灵魂升起
+      const fx = a.fx || (a.fx = {});
+      if (el < 350) { a.pose = 'idle'; a.expr = 'surprised'; a.shake = Math.floor(t / 66) % 2 ? 1 : -1; }
+      else {
+        if (!fx.hit) {
+          fx.hit = true; a.shake = 0;
+          flash = { color: '#b13e53', born: t, life: 320, alpha: 0.5 };
+          spawnParticles(a.x + 6, GY - 12, 18, REDS, { spread: 3, vx0: -26, vx1: 26, vy0: -36, vy1: -6, g: 70, life0: 500, life1: 1000 });
+        }
+        a.pose = 'kneel'; a.expr = 'dead';
+      }
+      if (el > 1200) {
+        if (!a.ghosted) { a.ghosted = true; ghosts.push({ x: a.x, y: GY - 16, avatar: a.avatar, born: t, life: 2200, drift: rand(-5, 5) }); }
+        a.alpha = Math.max(0, 1 - (el - 1200) / 700);
+      }
+      if (el > 2000) endDying(a, t);
     } else { // suicide / natural：安静地跪下，灵魂升起
       if (el < 900) { a.pose = 'kneel'; a.expr = 'sad'; }
       else {
@@ -1027,7 +1061,7 @@
 
   global.HungerStage = {
     VARIANTS, fitStage, spawn, introduce, say, think, envSay, lastWords, declare, die, victory, reset,
-    lovers: setLovers, vision, haunt, ghostWhisper, ghostGone,
+    lovers: setLovers, vision, haunt, ghostWhisper, ghostGone, attack,
     _debug: () => ({ actors: actors.map(a => ({ id: a.id, mode: a.mode, x: Math.round(a.x), y: a.y, pose: a.pose, expr: a.expr,
       hidden: !!a.hidden, alpha: a.alpha, sink: a.sink || 0, special: a.special })), markers: markers.length, ghosts: ghosts.length, W, H }),
   };

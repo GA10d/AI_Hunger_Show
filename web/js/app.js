@@ -119,10 +119,11 @@
         }
         thought(ev);
         HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text, to: ev.to,
-          special: ev.special, life: ev.life, lover: ev.lover, instant },
+          special: ev.special, life: ev.life, lover: ev.lover, act: ev.act, target: ev.target, instant },
           show(() => {
             tick();
             if (ev.who === 'env') HungerStage.envSay({ instant });
+            else if (ev.act === 'kill') HungerStage.attack(ev.player_id, ev.target_id, { instant }); // 扑向同伴
             else HungerStage.say(ev.player_id, { instant, len: ev.text.length });
           }));
         // 环境刚刚念了回声墙：紧跟着亮出墙上的原文（被抹掉的字只是一个空框）

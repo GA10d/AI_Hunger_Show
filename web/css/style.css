@@ -861,6 +861,45 @@ body {
 .msg.sp-chronicler .epitaph-head { color: #e8c170; letter-spacing: .1em; }
 .msg.sp-chronicler .tomb-bubble .text { color: #f3e2b4; text-shadow: 0 -2px 0 #14102a, 0 2px 0 #8a6a2a; }
 
+/* 下杀手：血红的框，斜着几道刀痕，角上两把匕首，出现时猛地一顿 */
+.msg.act-kill .bubble.px-box {
+  --edge: #ff4a4a;
+  --fill: #3a0d18;
+  margin-inline: 6px;
+  background: repeating-linear-gradient(135deg, transparent 0 14px, rgba(255, 74, 74, .2) 14px 16px), var(--fill);
+  animation: slash .5s steps(4) both;
+}
+.msg.act-kill .bubble .name { color: #ff6b6b; }
+.msg.act-kill .bubble .text { color: #ffd6d6; }
+.msg.act-kill .avatar { --edge: #ff4a4a; }
+/* 诀别（主动结束生命）：黑底、灰白的框，一朵白花 */
+.msg.act-end .bubble.px-box {
+  --edge: #c9d6e0;
+  --fill: #101018;
+  margin-inline: 6px;
+  background: linear-gradient(to bottom, rgba(201, 214, 224, .14), transparent 70%), var(--fill);
+}
+.msg.act-end .bubble .name { color: #c9d6e0; }
+.msg.act-end .bubble .text { color: #eef3f7; font-style: italic; letter-spacing: .06em; }
+.msg.act-end .avatar .sprite { filter: grayscale(.7); }
+.deco.d-dagger, .deco.d-lily { width: 24px; height: 24px; }
+/* 死亡框：被杀害是带刀痕的血红，自尽是安静的灰，殉情是暗粉 */
+.death-box.k-murdered::before { background: repeating-linear-gradient(135deg, transparent 0 18px, rgba(255, 74, 74, .22) 18px 21px), #3b0f1a; }
+.death-box.k-murdered { background: #ff4a4a; }
+.death-box.k-suicide { background: #94b0c2; }
+.death-box.k-suicide::before { background: #1c1f2c; }
+.death-box.k-suicide::after { border-color: rgba(201, 214, 224, .45); }
+.death-box.k-suicide .d-title { color: #c9d6e0; }
+.death-box.k-suicide .gav { --edge: #94b0c2; }
+.death-box.k-heartbreak { background: #ff9ab0; }
+.death-box.k-heartbreak::before { background: #33162c; }
+.death-box.k-heartbreak .d-title { color: #ff9ab0; }
+@keyframes slash {
+  0%   { transform: translateX(-12px) skewX(-10deg); filter: brightness(2.2); }
+  50%  { transform: translateX(5px); filter: none; }
+  100% { transform: none; }
+}
+
 /* 地缚灵的低语：死者的头像飘着，半透明的虚线框 */
 .msg.sp-haunt .avatar { --edge: var(--steel); animation: float 2.4s steps(4) infinite; }
 .msg.sp-haunt .avatar .sprite { filter: grayscale(.4) brightness(1.1); opacity: .55; }

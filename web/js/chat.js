@@ -17,6 +17,7 @@
  *           bard 吟游诗人（羊皮纸卷轴、音符）、gambler 赌徒（绿色赌桌、骰子和金币）、medium 通灵者（深紫、第三只眼）、
  *           believer 信徒（彩色玻璃窗的边框、烛台）、earthbound 地缚灵体质（青灰、垂着锁链）、lover 恋人（红边、两颗心）；
  *   HungerChat.add({ kind: 'message', who: 'ghost', name, avatar, to, text })   // 地缚灵对活人的低语：半透明的虚线框
+ *   message 带 act: 'kill'（下杀手：血红的框、刀痕、匕首，名字后写着对谁下手）| 'end_life'（诀别：黑底灰白框、一朵白花）
  *   HungerChat.add({ kind: 'lovers', players: [{name, avatar}, {name, avatar}] })  // 一对恋人同时降生
  *   HungerChat.add({ kind: 'vision', name, avatar, items: [{line, outline}] })    // 通灵者看见的轮廓（被抹掉的字只是一个空框）
  * instant = 不用打字机效果（回放历史时用）；
@@ -25,7 +26,10 @@
   'use strict';
 
   const MAX_ITEMS = 300; // 最多保留这么多条，防止长时间运行后页面越来越卡
-  const DEATH_TITLES = { execution: '被处决', suicide: '自尽', wrong_guess: '宣告失败', natural: '死亡', heartbreak: '殉情' };
+  const DEATH_TITLES = { execution: '被处决', suicide: '自尽', wrong_guess: '宣告失败', natural: '死亡', heartbreak: '殉情', murdered: '被杀害' };
+  // 下杀手（kill）/ 诀别（end_life）的发言框：角上的装饰；死亡框左边的图标随死法变
+  const ACT_DECO = { kill: [['dagger', 'tl'], ['dagger', 'br']], end_life: [['lily', 'br']] };
+  const DEATH_ICONS = { murdered: 'dagger', suicide: 'lily', heartbreak: 'heart' };
 
   // 稀有身份：登场卡片的标题、副标题，以及发言框 / 卡片上的小装饰（[像素图, 位置]，位置见 style.css 的 .deco.at-*）
   const SPECIALS = {
@@ -81,9 +85,13 @@
       : item.special === 'lover' && item.lover && !item.to ? `${item.name} ♥ ${item.lover}` : item.name;
     el.querySelector('.name').textContent = haunt ? `${item.name}（地缚灵）→ ${item.to} · 低语`
       : item.ghost ? `† ${who} · ${item.revised ? '改写' : ''}${item.special === 'chronicler' ? '史官的遗言' : '遗言'} †`
-      : item.to ? `${who} → ${item.to}（悄悄话）` : who;
+      : item.to ? `${who} → ${item.to}（悄悄话）`
+      : item.act === 'kill' ? `${who} ⚔ 对「${item.target}」下了杀手` : item.act === 'end_life' ? `${who} · 诀别` : who;
     const sp = SPECIALS[item.special];
-    if (!item.ghost && !haunt && sp) el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(sp.bubble));
+    if (ACT_DECO[item.act]) { // 杀人、自尽的那一句：换上专门的框，装饰也换成匕首 / 白花
+      el.classList.add(item.act === 'kill' ? 'act-kill' : 'act-end');
+      el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(ACT_DECO[item.act]));
+    } else if (!item.ghost && !haunt && sp) el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(sp.bubble));
     if (item.to && !haunt) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
     if (!isEnv && item.pid != null) { // 选手的头像：点一下给他点赞 / 点踩，头像下面挂着计数
       const av = el.querySelector('.avatar');
@@ -182,14 +190,16 @@
     el.className = 'death-box';
     el.setAttribute('aria-label', `${r.name} 死亡，查看生平`);
     el.innerHTML =
-      '<span class="sprite skull" data-sprite="skull"></span>' +
+      `<span class="sprite skull" data-sprite="${DEATH_ICONS[r.kind] || 'skull'}"></span>` +
       '<span class="d-body"><span class="d-title"></span><span class="d-cause"></span><span class="d-meta"></span></span>' +
       `<span class="gav px-box"><span class="sprite" data-sprite="${Sprites.avatar(r.avatar)}"></span></span>`;
     el.querySelector('.d-title').textContent = `† ${r.name} ${DEATH_TITLES[r.kind] || '死亡'} †`;
     if (r.special === 'revived') el.classList.add('revived');
+    el.classList.add(`k-${r.kind}`); // 被杀害 / 自尽 的死亡框各有颜色
     el.querySelector('.d-cause').textContent = `死因：${r.cause}`;
     el.querySelector('.d-meta').textContent =
-      [r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平'].filter(Boolean).join(' · ');
+      [r.killed_by ? `死于「${r.killed_by}」之手` : '', r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平']
+        .filter(Boolean).join(' · ');
     if (r.votes) el.querySelector('.d-body').append(HungerVotes.badge(r.votes, 'sealed')); // 观众的评价，随死亡封存
     if (item.onOpen) el.addEventListener('click', item.onOpen);
     Sprites.mount(el);

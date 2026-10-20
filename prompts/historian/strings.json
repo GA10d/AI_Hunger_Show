@@ -25,9 +25,11 @@
     "suicide": "主动结束了自己的生命",
     "wrong_guess": "向世界宣告了错误或不完整的真相，被当场抹去",
     "heartbreak": "恋人死去之后，心碎殉情",
+    "murdered": "被同场的另一位选手亲手杀死",
     "victory": "完整地宣告了世界的真相，赢下了这场游戏（他是胜利者，而不是死者）"
   },
   "suicide_reason": "主动结束了自己的生命",
+  "murdered_reason": "被同伴「{killer}」亲手杀死",
   "heartbreak_reason": "恋人死了，他的心也跟着死了",
 
   "story_labels": {
@@ -37,6 +39,7 @@
     "guess": "{name}（宣告）：",
     "thought": "{name}（心里想）：",
     "whisper": "{name}（悄悄话）：",
+    "kill": "{name}（对同伴下杀手）：",
     "other": ""
   },
   "story_whisper": "（悄悄对{name}说）{content}",

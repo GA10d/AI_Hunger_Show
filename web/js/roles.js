@@ -203,6 +203,8 @@
       info.append(c);
     }
     if (r.lover) info.append(el('div', 'gmeta', `与「${r.lover}」是一对恋人`));
+    if (r.killed_by) info.append(el('div', 'gmeta', `死于「${r.killed_by}」之手`));
+    if (r.kills && r.kills.length) info.append(el('div', 'gmeta', `亲手杀死了：${r.kills.map(n => `「${n}」`).join('、')}`));
     if (r.ghost) info.append(el('div', 'gmeta', `死后化作地缚灵，低语了 ${r.ghost.whispers || 0} 次${GHOST_END[r.ghost.end] ? '，' + GHOST_END[r.ghost.end] : ''}`));
     if (r.votes) { // 观众的评价：死亡那一刻封存
       const v = el('div', 'gmeta bio-votes', '观众评价');

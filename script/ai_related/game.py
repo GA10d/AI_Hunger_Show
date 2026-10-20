@@ -10,6 +10,8 @@ Mechanics (the *content* of the world lives in words/<world>/, see world.py):
       last_words  - takes the whole action; never reaches the environment or the other player on the
                     field; inherited only by the player(s) born next. May be left again: the new one replaces the old
       end_life    - the player ends their own life              (worlds with a judge)
+      kill        - the player kills the other player on the field (only when there is one). Said out loud and judged
+                    first: if the killer breaks a rule they die instead and the other one lives
       guess       - the player declares the whole truth of the world; the oracle rules on it at once:
                     wrong -> death, right -> the players win and the game is over   (worlds with an oracle)
  4. Every player picks their own name when they spawn.
@@ -105,6 +107,8 @@ class Player:
     revived_from: int | None = None  # the grave record of the life before
     lover: "Player | None" = field(default=None, repr=False, compare=False)
     heartbroken: bool = False  # the lover died: one last action, then this one dies too
+    killed_by: str | None = None  # the name of whoever killed them (kind "murdered")
+    kills: list = field(default_factory=list)  # names of those they killed
 
     def tags(self) -> dict:
         """What the page needs to draw a special player differently (sent with every event about them)."""
@@ -219,7 +223,8 @@ class Game:
         self.H = self.prompts.strings("historian")  # the obituary
         self.judge = Judge(self.client, self.world.judge, judge_model, self.prompts) if self.world.judge else None
         self.oracle = Oracle(self.client, self.world.oracle, judge_model, self.prompts) if self.world.oracle else None
-        self.actions = ["speak", "last_words"] + (["end_life"] if self.judge else []) + (["guess"] if self.oracle else [])
+        self.actions = (["speak", "last_words"] + (["end_life"] if self.judge else []) + (["guess"] if self.oracle else [])
+                        + ["kill"])  # kill is offered only on a turn when someone else is on the field
         self.player_prompt = (player_prompt or self.world.player) + player_rules(self.prompts, self.actions)
         self.env = Agent(ENV_NAME, (env_prompt or self.world.env) + "\n\n" + self.prompts.text("env/rules"),
                          client=self.client, model=model, temperature=1.2, prompts=self.prompts)
@@ -624,7 +629,7 @@ class Game:
         key = kind if kind in P["revived_death"] else "natural"
         if kind == "execution" and not line:
             key = "execution_silent"
-        death = fill(P["revived_death"][key], line=line)
+        death = fill(P["revived_death"][key], line=line, killer=past.get("killed_by") or "")
         if past.get("observation"):
             death += fill(P["revived_scene"], observation=past["observation"])
         return fill(self.prompts.text("player/revived"), name=past["name"], life=past.get("life", 1) + 1,
@@ -666,11 +671,12 @@ class Game:
 
     # ---- one action --------------------------------------------------------
     def _act(self, p: Player) -> Iterator[dict]:
-        data = p.agent.get_json_reply(self._turn_instruction(p), example=self.P["turn_example"],
-                                      validator=lambda d: _valid_turn(d, self.actions), commit=False,
-                                      max_tokens=2048 if "guess" in self.actions else 1024)
-        action, content = data["action"], data["content"].strip()
         partner = next((q for q in self.players if q is not p), None)
+        acts = [a for a in self.actions if a != "kill" or partner]  # nobody to kill when alone
+        data = p.agent.get_json_reply(self._turn_instruction(p, acts), example=self.P["turn_example"],
+                                      validator=lambda d: _valid_turn(d, acts), commit=False,
+                                      max_tokens=2048 if "guess" in acts else 1024)
+        action, content = data["action"], data["content"].strip()
         to = str(data.get("to") or "").strip()
         # a whisper: only for speech, only with a partner on the field, and only if "to" names them
         whisper = bool(partner) and action == "speak" and bool(to) and (partner.name in to or to in ("同伴", "对方"))
@@ -703,10 +709,13 @@ class Game:
             yield self._emit({"type": "message", "who": "player", "text": content, "to": partner.name, **base})
             partner.agent.insert_context("user", fill(self.P["whisper_heard"], content=content), speaker=p.name)
             partner.log.append(("other", fill(self.H["story_heard_whisper"], name=p.name, content=content)))
-        else:  # speak / end_life: said out loud, so everyone hears it
+        else:  # speak / end_life / kill: said out loud, so everyone hears it
             p.last_line = content
-            p.log.append(("speak", content))
-            yield self._emit({"type": "message", "who": "player", "text": content, **base})
+            p.log.append(("kill" if action == "kill" else "speak", content))
+            act = {"act": action} if action in ("end_life", "kill") else {}  # the page frames a farewell or an attack
+            if action == "kill":
+                act.update(target=partner.name, target_id=partner.id)
+            yield self._emit({"type": "message", "who": "player", "text": content, **act, **base})
             self.env.insert_context("user", content, speaker=p.name)
             for q in self.players:
                 if q is not p:
@@ -725,6 +734,12 @@ class Game:
         if action == "end_life":
             yield from self._kill([(p, "suicide", self.H["suicide_reason"], "")])
             return
+        if action == "kill" and self._alive(partner):  # the judge let the killer live: the other one dies
+            partner.killed_by = p.name
+            p.kills.append(partner.name)
+            yield from self._kill([(partner, "murdered", fill(self.H["murdered_reason"], killer=p.name),
+                                    fill(self.P["murder_scene"], killer=p.name, victim=partner.name))])
+            return
         if whisper:
             return
         yield from self._env_say()
@@ -738,8 +753,8 @@ class Game:
         names = "、".join(f"「{q.name}」" for q in others)
         return fill(self.P["field_partner"], count=len(self.players), names=names)
 
-    def _turn_instruction(self, p: Player) -> str:
-        options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(self.actions, 1))
+    def _turn_instruction(self, p: Player, actions: list[str]) -> str:
+        options = "\n".join(f"{i}. {self.P['turn_actions'][a]}" for i, a in enumerate(actions, 1))
         options += "\n" + (fill(self.P["turn_last_words_current"], text=p.last_words) if p.last_words
                            else self.P["turn_remind_last_words"])
         return fill(self.prompts.text("player/turn"), round=self.round, field=self._field_text(p), options=options)
@@ -889,6 +904,10 @@ class Game:
                 record["fatal_line"] = p.fatal_text  # told to them if they ever come back
             if observation:
                 record["observation"] = observation
+            if p.killed_by:
+                record["killed_by"] = p.killed_by
+            if p.kills:
+                record["kills"] = list(p.kills)
             if p.personality:
                 record["personality"] = shown(p.personality)
             if rest and rest[0]:
