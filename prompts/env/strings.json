@@ -1,5 +1,7 @@
 {
   "newcomers": "新选手 {names} 进入了这个世界。现在场上共有 {count} 位选手：{everyone}。",
+  "believer": " 「{name}」似乎把你当作神明来崇拜。你照常回应即可。",
+  "revived": " 其中「{name}」并不是新面孔：这个人曾经死在这里，如今带着前世的记忆复活归来。",
   "echo_empty": " 回声墙上目前是空的。",
   "echo_wall": " 回声墙（最近的回声，从新到旧）：{lines}",
   "erased_item": "第 {i} 条里的「□」原本是「{word}」",

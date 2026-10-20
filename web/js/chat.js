@@ -12,13 +12,38 @@
  * sacred = 宣告 / 审判 / 获释：神圣的拱顶、金光、一个字一个字显现。
  *          guess 是住客的宣告，deny 是被驳回，grant 是通过，freedom 是同胞获释的终章；
  * echo   = 回声墙：一面砖墙，死者最后说的话一行一行浮现，被抹掉的字是一个闪着红光的空框；
+ * special = 稀有身份，发言框和登场卡片各有各的样子（见下面的 SPECIALS 和 style.css）：
+ *           revived 复活（金边、角上小十字架；卡片两侧翅膀、头顶光环）、catgirl 猫娘（粉色、猫耳、爪印）、
+ *           bard 吟游诗人（羊皮纸卷轴、音符）、gambler 赌徒（绿色赌桌、骰子和金币）、medium 通灵者（深紫、第三只眼）、
+ *           believer 信徒（彩色玻璃窗的边框、烛台）、earthbound 地缚灵体质（青灰、垂着锁链）、lover 恋人（红边、两颗心）；
+ *   HungerChat.add({ kind: 'message', who: 'ghost', name, avatar, to, text })   // 地缚灵对活人的低语：半透明的虚线框
+ *   HungerChat.add({ kind: 'lovers', players: [{name, avatar}, {name, avatar}] })  // 一对恋人同时降生
+ *   HungerChat.add({ kind: 'vision', name, avatar, items: [{line, outline}] })    // 通灵者看见的轮廓（被抹掉的字只是一个空框）
  * instant = 不用打字机效果（回放历史时用）；
  * onShow 在该条开始显示的那一刻调用，用来让“墓园/年龄/轮数”等状态和画面同步。 */
 (function (global) {
   'use strict';
 
   const MAX_ITEMS = 300; // 最多保留这么多条，防止长时间运行后页面越来越卡
-  const DEATH_TITLES = { execution: '被处决', suicide: '自尽', wrong_guess: '宣告失败', natural: '死亡' };
+  const DEATH_TITLES = { execution: '被处决', suicide: '自尽', wrong_guess: '宣告失败', natural: '死亡', heartbreak: '殉情' };
+
+  // 稀有身份：登场卡片的标题、副标题，以及发言框 / 卡片上的小装饰（[像素图, 位置]，位置见 style.css 的 .deco.at-*）
+  const SPECIALS = {
+    revived: { title: it => `${it.name} 复活了 · 第 ${it.life || 2} 世`,
+      sub: it => (it.diedRound != null ? `前世死于第 ${it.diedRound} 轮，带着记忆回来了` : '带着前世的记忆回来了'),
+      bubble: [['holyCross', 'tl'], ['holyCross', 'br']], card: [] },
+    catgirl: { tag: '猫娘', sub: () => '长着猫耳和尾巴，说话爱带「喵」', bubble: [['paw', 'br']], card: [['paw', 'tl'], ['paw', 'br']] },
+    bard: { tag: '吟游诗人', sub: () => '只会用诗句说话', bubble: [['note', 'tr'], ['note', 'bl']], card: [['note', 'tr'], ['note', 'bl']] },
+    gambler: { tag: '赌徒',
+      sub: it => (it.gamble === 'won' ? '出生时押上了寿命——赢了，能多活一阵' : it.gamble === 'lost' ? '出生时押上了寿命——输了，只剩一半的时间' : '什么都敢押'),
+      bubble: [['dice', 'tr'], ['coin', 'bl']], card: [['dice', 'tr'], ['coin', 'bl']] },
+    medium: { tag: '通灵者', sub: () => '看得见回声墙上被抹掉的字的轮廓', bubble: [['eye', 'tr']], card: [['eye', 'tr']] },
+    believer: { tag: '信徒', sub: () => '把「环境」当作神明来崇拜', bubble: [['candle', 'tr']], card: [['candle', 'tl'], ['candle', 'tr']] },
+    earthbound: { tag: '地缚灵体质', sub: () => '死后不会离开，会化作地缚灵在这里徘徊', bubble: [['chain', 'b']], card: [['chain', 'b']] },
+    lover: { tag: '恋人', sub: it => (it.lover ? `和「${it.lover}」是一对恋人` : '命中注定的那个人，同时降生在这里'),
+      bubble: [['heart', 'tl'], ['heart', 'tr']], card: [['heart', 'tl'], ['heart', 'tr']] },
+  };
+  const deco = list => (list || []).map(([sp, at]) => `<span class="sprite deco d-${sp} at-${at}" data-sprite="${sp}"></span>`).join('');
   const chat = document.getElementById('chat');
   const queue = [];
   let busy = false;
@@ -38,11 +63,11 @@
 
   function buildMessage(item) {
     if (item.thought) return buildThought(item);
-    const isEnv = item.who === 'env';
+    const isEnv = item.who === 'env', haunt = item.who === 'ghost'; // haunt：地缚灵在低语
     const el = document.createElement('article');
-    el.className = `msg ${isEnv ? 'left sp-env' : 'right sp-player'}${item.ghost ? ' sp-ghost' : ''}`;
+    el.className = `msg ${isEnv ? 'left sp-env' : 'right sp-player'}${item.ghost ? ' sp-ghost' : ''}${haunt ? ' sp-haunt' : item.special ? ' sp-' + item.special : ''}`;
     if (!isEnv) el.style.setProperty('--accent', Sprites.accent(item.avatar)); // 每位选手一个主色，同场时好区分
-    const sprite = isEnv ? 'eye' : Sprites.avatar(item.avatar);
+    const sprite = isEnv ? 'eye' : haunt && Sprites.SPRITES[`${item.avatar}Ghost`] ? `${item.avatar}Ghost` : Sprites.avatar(item.avatar);
     const bubble = item.ghost
       ? '<div class="bubble tomb-bubble"><div class="epitaph-head">' +
         '<span class="sprite candle" data-sprite="candle"></span><span class="name"></span>' +
@@ -50,8 +75,13 @@
       : '<div class="bubble px-box"><div class="name"></div><p class="text"></p></div>';
     el.innerHTML = `<div class="avatar px-box"><span class="sprite" data-sprite="${sprite}"></span></div>` + bubble;
     // 名字和台词都用 textContent：这里放的是 LLM 生成的文本，不能当 HTML 解析
-    el.querySelector('.name').textContent = item.ghost ? `† ${item.name} · 遗言 †` : item.to ? `${item.name} → ${item.to}（悄悄话）` : item.name;
-    if (item.to) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
+    const who = item.special === 'revived' && item.life ? `${item.name} · 第 ${item.life} 世`
+      : item.special === 'lover' && item.lover && !item.to ? `${item.name} ♥ ${item.lover}` : item.name;
+    el.querySelector('.name').textContent = haunt ? `${item.name}（地缚灵）→ ${item.to} · 低语`
+      : item.ghost ? `† ${who} · ${item.revised ? '改写遗言' : '遗言'} †` : item.to ? `${who} → ${item.to}（悄悄话）` : who;
+    const sp = SPECIALS[item.special];
+    if (!item.ghost && !haunt && sp) el.querySelector('.bubble').insertAdjacentHTML('beforeend', deco(sp.bubble));
+    if (item.to && !haunt) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
     if (!isEnv && item.pid != null) { // 选手的头像：点一下给他点赞 / 点踩，头像下面挂着计数
       const av = el.querySelector('.avatar');
       const col = document.createElement('div');
@@ -64,21 +94,71 @@
   }
 
   // 性格卡：一个优点（绿）+ 一个缺点（红）。名字和说明都是 LLM / 配置里的文字，用 textContent
+  // 稀有身份的卡片：标题写身份，副标题一句说明，配上各自的装饰；复活的人两侧展开一对翅膀，头像上方一圈光环
   function buildPersona(item) {
     const el = document.createElement('article');
-    el.className = 'persona px-box';
+    el.className = `persona px-box${item.special ? ' ' + item.special : ''}`;
     el.style.setProperty('--accent', Sprites.accent(item.avatar));
+    const sp = SPECIALS[item.special], revived = item.special === 'revived';
     el.innerHTML =
-      `<span class="gav px-box"><span class="sprite" data-sprite="${Sprites.avatar(item.avatar)}"></span></span>` +
-      '<div class="p-body"><div class="p-title"></div><div class="p-row good"><b class="chip good"></b><span class="p-tip"></span></div>' +
-      '<div class="p-row bad"><b class="chip bad"></b><span class="p-tip"></span></div></div>';
-    const { virtue, flaw } = item.personality;
-    el.querySelector('.p-title').textContent = `${item.name} 的性格`;
-    const rows = el.querySelectorAll('.p-row');
-    rows[0].querySelector('.chip').textContent = `优点 · ${virtue.name}`;
-    rows[0].querySelector('.p-tip').textContent = virtue.tip || '';
-    rows[1].querySelector('.chip').textContent = `缺点 · ${flaw.name}`;
-    rows[1].querySelector('.p-tip').textContent = flaw.tip || '';
+      (revived ? '<span class="sprite wing l" data-sprite="wing"></span><span class="sprite wing r" data-sprite="wing"></span>' : '') +
+      deco(sp && sp.card) +
+      `<span class="gav px-box">${revived ? '<i class="halo"></i>' : ''}<span class="sprite" data-sprite="${Sprites.avatar(item.avatar)}"></span></span>` +
+      '<div class="p-body"><div class="p-title"></div><div class="p-sub"></div></div>';
+    el.querySelector('.p-title').textContent =
+      !sp ? `${item.name} 的性格` : sp.title ? sp.title(item) : `${item.name} · ${sp.tag}`;
+    const sub = el.querySelector('.p-sub');
+    if (sp) sub.textContent = sp.sub(item);
+    else sub.remove();
+    if (item.personality) {
+      const { virtue, flaw } = item.personality;
+      const row = (cls, label, t) => {
+        const r = document.createElement('div');
+        r.className = `p-row ${cls}`;
+        r.innerHTML = `<b class="chip ${cls}"></b><span class="p-tip"></span>`;
+        r.querySelector('.chip').textContent = `${label} · ${t.name}`;
+        r.querySelector('.p-tip').textContent = t.tip || '';
+        return r;
+      };
+      el.querySelector('.p-body').append(row('good', '优点', virtue), row('bad', '缺点', flaw));
+    }
+    Sprites.mount(el);
+    return el;
+  }
+
+  // 一对恋人同时降生：两个头像中间一颗心
+  function buildLovers(item) {
+    const el = document.createElement('article');
+    el.className = 'lovers-card px-box';
+    const [a, b] = item.players;
+    const face = p => `<span class="gav px-box" style="--edge:${Sprites.accent(p.avatar)}"><span class="sprite" data-sprite="${Sprites.avatar(p.avatar)}"></span></span>`;
+    el.innerHTML = `<div class="l-title">一对恋人</div><div class="l-row">${face(a)}<span class="sprite l-heart" data-sprite="heart"></span>${face(b)}</div>` +
+      '<div class="l-names"></div><div class="l-sub">一个死去，另一个也活不长了</div>';
+    el.querySelector('.l-names').textContent = `「${a.name}」与「${b.name}」`;
+    Sprites.mount(el);
+    return el;
+  }
+
+  // 通灵者看见的轮廓：墙上的那句话（空框照旧）+ 空框里残存的轮廓
+  function buildVision(item) {
+    const el = document.createElement('article');
+    el.className = 'vision-card px-box';
+    el.innerHTML = '<div class="v-head"><span class="sprite" data-sprite="eye"></span><span class="v-title"></span>' +
+      '<span class="sprite" data-sprite="eye"></span></div><ul class="v-items"></ul>';
+    el.querySelector('.v-title').textContent = `通灵者「${item.name}」看见了`;
+    const list = el.querySelector('.v-items');
+    if (!item.items.length) list.append(Object.assign(document.createElement('li'), { className: 'v-none', textContent: '墙上还没有被抹掉的字，什么也没有看见。' }));
+    item.items.forEach(it => {
+      const li = document.createElement('li');
+      const line = document.createElement('span');
+      line.className = 'v-line';
+      String(it.line).split('□').forEach((part, j) => {
+        if (j) line.append(Object.assign(document.createElement('span'), { className: 'blank', textContent: '□' }));
+        line.append(part);
+      });
+      li.append(line, Object.assign(document.createElement('span'), { className: 'v-outline', textContent: it.outline }));
+      list.append(li);
+    });
     Sprites.mount(el);
     return el;
   }
@@ -103,6 +183,7 @@
       '<span class="d-body"><span class="d-title"></span><span class="d-cause"></span><span class="d-meta"></span></span>' +
       `<span class="gav px-box"><span class="sprite" data-sprite="${Sprites.avatar(r.avatar)}"></span></span>`;
     el.querySelector('.d-title').textContent = `† ${r.name} ${DEATH_TITLES[r.kind] || '死亡'} †`;
+    if (r.special === 'revived') el.classList.add('revived');
     el.querySelector('.d-cause').textContent = `死因：${r.cause}`;
     el.querySelector('.d-meta').textContent =
       [r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平'].filter(Boolean).join(' · ');
@@ -188,9 +269,10 @@
       next();
       return;
     }
-    if (item.kind === 'divider' || item.kind === 'death' || item.kind === 'persona') {
-      append(item.kind === 'death' ? buildDeath(item) : item.kind === 'persona' ? buildPersona(item) : buildDivider(item));
-      setTimeout(next, instant ? 0 : (item.kind === 'death' ? 1400 : item.kind === 'persona' ? 900 : 500)); // 死亡后停顿久一点
+    const cards = { divider: buildDivider, death: buildDeath, persona: buildPersona, lovers: buildLovers, vision: buildVision };
+    if (cards[item.kind]) {
+      append(cards[item.kind](item));
+      setTimeout(next, instant ? 0 : ({ death: 1400, persona: 900, lovers: 1400, vision: 1600 }[item.kind] || 500)); // 死亡后停顿久一点
       return;
     }
     if (item.kind === 'echo') { // 字迹一行一行从墙里浮现出来，新刻上去的那几行最先、最慢

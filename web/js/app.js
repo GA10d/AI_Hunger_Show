@@ -21,6 +21,14 @@
     demoScripture: { ...HungerDemo.SCRIPTURE_COUNTS }, // 演示模式下每条世界观被触发的次数
   };
 
+  // 稀有身份入场时，分隔条上的那句话
+  const SPECIAL_ENTRY = {
+    catgirl: '是一只猫娘！', bard: '是一位吟游诗人', gambler: '是一个赌徒', medium: '是一位通灵者', believer: '是一位信徒',
+    earthbound: '是地缚灵体质', lover: '恋人',
+  };
+  const GHOST_GONE = { dispersed: '魂飞魄散了', faded: '渐渐消散了', freed: '也获得了自由' };
+  const idOf = name => { for (const p of state.alive.values()) if (p.name === name) return p.id; return null; };
+
   const STOP_REASONS = {
     stopped: '已手动暂停', max_rounds: '已达到轮数上限', max_players: '已达到选手数量上限', budget: '已达到费用上限',
     victory: '回廊已被解开，同胞获得自由',
@@ -77,16 +85,20 @@
     switch (ev.type) {
       case 'spawn': {
         const p = ev.player;
+        const back = ev.revived; // 复活：观众点赞最多的死者，带着前世的记忆回来了
         HungerChat.add({
-          kind: 'divider', icon: 'heart', instant,
-          text: `第 ${p.id} 位选手「${p.name}」入场${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
+          kind: 'divider', icon: back ? 'star' : 'heart', instant,
+          text: back ? `「${p.name}」复活了！第 ${back.life} 世${ev.inherited_last_words ? '，带着前人的遗言' : ''}`
+            : `第 ${p.id} 位选手「${p.name}」入场${SPECIAL_ENTRY[p.special] ? `（${SPECIAL_ENTRY[p.special]}）` : ''}${ev.inherited_last_words ? '，带着前人的遗言' : ''}`,
         }, show(() => {
-          state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0, personality: ev.personality || p.personality });
-          HungerStage.spawn(p, { instant });
+          state.alive.set(p.id, { id: p.id, name: p.name, avatar: p.avatar, age: 0, personality: ev.personality || p.personality,
+            special: p.special, life: p.life, lover: p.lover });
+          HungerStage.spawn(p, { instant, revived: !!back });
         }));
-        // 入场时亮出性格（一个优点 + 一个缺点），再由他自己用一句心里话说说自己是个什么样的人
-        if (ev.personality) {
-          HungerChat.add({ kind: 'persona', name: p.name, avatar: p.avatar, personality: ev.personality, instant }, show(() => HungerStage.introduce(p.id, { instant })));
+        // 入场时亮出性格（一个优点 + 一个缺点），再由他自己用一句心里话说说自己是个什么样的人；复活的人、猫娘的卡片各有各的样子
+        if (ev.personality || p.special) {
+          HungerChat.add({ kind: 'persona', name: p.name, avatar: p.avatar, personality: ev.personality, special: p.special,
+            life: p.life, diedRound: back && back.died_round, gamble: ev.gamble, lover: p.lover, instant }, show(() => HungerStage.introduce(p.id, { instant })));
         }
         if (ev.intro) {
           HungerChat.add({ kind: 'message', who: 'player', name: p.name, avatar: p.avatar, text: ev.intro, thought: true, instant }, show());
@@ -94,8 +106,14 @@
         break;
       }
       case 'message':
+        if (ev.who === 'ghost') { // 地缚灵贴着某个活人的耳朵低语：死者不能再被投票
+          HungerChat.add({ kind: 'message', who: 'ghost', name: ev.name, avatar: ev.avatar, text: ev.text, to: ev.to, instant },
+            show(() => HungerStage.ghostWhisper(ev.player_id, idOf(ev.to), { instant })));
+          break;
+        }
         thought(ev);
-        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text, to: ev.to, instant },
+        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text, to: ev.to,
+          special: ev.special, life: ev.life, lover: ev.lover, instant },
           show(() => {
             tick();
             if (ev.who === 'env') HungerStage.envSay({ instant });
@@ -109,7 +127,7 @@
       case 'lastwords':
         thought(ev);
         HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text,
-          ghost: true, instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
+          ghost: true, revised: ev.revised, special: ev.special, life: ev.life, lover: ev.lover, instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
         break;
       case 'guess': // 宣告：向门外的存在说出还原的全部真相
         thought(ev);
@@ -153,6 +171,27 @@
         }));
         break;
       }
+      case 'lovers': // 同时降生的两个人，是一对恋人
+        HungerChat.add({ kind: 'lovers', players: ev.players, instant },
+          show(() => {
+            const [a, b] = ev.players;
+            [[a, b], [b, a]].forEach(([x, y]) => { const q = state.alive.get(x.id); if (q) q.lover = y.name; });
+            HungerStage.lovers(a.id, b.id, { instant });
+          }));
+        break;
+      case 'vision': // 通灵者看见了回声墙上空框里的轮廓
+        HungerChat.add({ kind: 'vision', name: ev.name, avatar: ev.avatar, items: ev.items || [], instant },
+          show(() => HungerStage.vision(ev.player_id, { instant })));
+        break;
+      case 'haunt': // 地缚灵体质的人死了，却没有离开
+        HungerChat.add({ kind: 'divider', icon: 'skull', instant, text: `「${ev.name}」没有离开……化作了地缚灵，徘徊在这里` },
+          show(() => HungerStage.haunt({ id: ev.player_id, avatar: ev.avatar, name: ev.name }, { instant })));
+        break;
+      case 'ghost_gone':
+        HungerChat.add({ kind: 'divider', icon: ev.reason === 'freed' ? 'star' : 'skull', instant,
+          text: `地缚灵「${ev.name}」${GHOST_GONE[ev.reason] || '离开了'}${ev.observation ? `：${ev.observation}` : ''}` },
+        show(() => HungerStage.ghostGone(ev.player_id, ev.reason, { instant })));
+        break;
       case 'scripture': // 某条世界观刚刚生效：让“圣言”按钮闪一下（次数在打开圣言页时读取）
         HungerChat.add({ kind: 'signal' }, show(() => pulse('scripture')));
         break;

@@ -702,6 +702,214 @@ body {
 .p-tip { color: var(--mist); font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
 .bio .trait { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0; }
 
+/* ---------- 稀有的选手：复活的人（金色、十字架、翅膀、光环）/ 猫娘（粉色、猫耳、爪印） ---------- */
+.chip.holy { background: var(--gold); }
+.chip.cat { background: #f7a8d0; }
+.chip.bard { background: #e8d5a3; }
+.chip.gambler { background: #6fd08c; }
+.chip.medium { background: #c28cd9; }
+.chip.believer { background: #f4f4f4; }
+.chip.earthbound { background: #73eff7; }
+.chip.lover { background: #ff9ab0; }
+/* 角上的小装饰：.d-<像素图> 决定大小，.at-<位置> 决定钉在哪个角 */
+.deco { position: absolute; z-index: 1; pointer-events: none; width: 16px; height: 16px; }
+.deco.d-holyCross { width: 14px; height: 18px; }
+.deco.d-dice { width: 18px; height: 18px; }
+.deco.d-coin, .deco.d-note, .deco.d-candle, .deco.d-eye, .deco.d-heart { width: 24px; height: 24px; }
+.deco.d-chain { width: 30px; height: 12px; }
+.deco.at-tl { left: -9px; top: -11px; }
+.deco.at-tr { right: -9px; top: -11px; }
+.deco.at-bl { left: -9px; bottom: -11px; }
+.deco.at-br { right: -9px; bottom: -11px; }
+.deco.at-b { left: 50%; bottom: -10px; margin-left: -15px; }
+.deco.d-paw { opacity: .55; }
+.deco.d-paw.at-br { right: 6px; bottom: 4px; transform: rotate(-14deg); }
+.deco.d-paw.at-tl { left: 6px; top: 6px; transform: rotate(18deg); }
+.deco.d-dice { transform: rotate(14deg); animation: dice-roll 2.4s steps(1) infinite; }
+.deco.d-heart { animation: bob 1s steps(2) infinite; }
+.deco.d-eye { animation: flicker 2.2s steps(2) infinite; }
+.deco.d-candle { animation: flicker 1.1s steps(2) infinite; }
+.persona .deco.at-tl { left: -6px; top: -8px; }
+.persona .deco.at-tr { right: -6px; top: -8px; }
+.persona .deco.at-bl { left: -6px; bottom: -8px; }
+.persona .deco.at-br { right: -6px; bottom: -8px; }
+.msg:is(.sp-revived, .sp-catgirl, .sp-bard, .sp-gambler, .sp-medium, .sp-believer, .sp-earthbound, .sp-lover) .bubble.px-box { margin-inline: 6px; }
+/* 复活的人：发言框金边，左上、右下两个角上钉着小十字架 */
+.msg.sp-revived .bubble.px-box {
+  --edge: var(--gold);
+  background: linear-gradient(to bottom right, rgba(255, 205, 117, .16), transparent 60%), var(--fill);
+}
+.msg.sp-revived .bubble .name { color: var(--gold); }
+.msg.sp-revived .avatar { --edge: var(--gold); box-shadow:
+  0 calc(-1 * var(--px)) 0 0 var(--edge), 0 var(--px) 0 0 var(--edge), calc(-1 * var(--px)) 0 0 0 var(--edge), var(--px) 0 0 0 var(--edge),
+  0 0 12px 2px rgba(255, 205, 117, .45); }
+/* 猫娘：粉色的发言框，框顶长出两只猫耳，右下角印着爪印 */
+.msg.sp-catgirl .bubble.px-box { --edge: #f7a8d0; --fill: #45284a; }
+.msg.sp-catgirl .bubble .name { color: #f7a8d0; }
+.msg.sp-catgirl .bubble.px-box::before, .msg.sp-catgirl .bubble.px-box::after,
+.persona.catgirl::before, .persona.catgirl::after { /* 猫耳：阶梯形的像素三角 */
+  content: "";
+  position: absolute;
+  top: -20px;
+  width: 20px;
+  height: 16px;
+  background: var(--edge);
+  clip-path: polygon(0 100%, 0 0, 4px 0, 4px 4px, 8px 4px, 8px 8px, 12px 8px, 12px 12px, 16px 12px, 16px 100%, 20px 100%);
+}
+.msg.sp-catgirl .bubble.px-box::before, .persona.catgirl::before { left: 10px; }
+.msg.sp-catgirl .bubble.px-box::after, .persona.catgirl::after { right: 10px; transform: scaleX(-1); }
+.msg.sp-catgirl .bubble { margin-top: 22px; }
+/* 复活时的登场卡片：两侧展开翅膀，头顶一圈光环 */
+.persona.revived {
+  --edge: var(--gold);
+  --fill: #2b2a4a;
+  width: min(calc(100% - 96px), 420px);
+  background: radial-gradient(ellipse 70% 90% at 30% 50%, rgba(255, 205, 117, .25), transparent 70%), var(--fill);
+}
+.persona.revived .p-title { color: var(--gold); font-size: 14px; text-shadow: 0 0 6px rgba(255, 205, 117, .6); }
+.persona.revived .gav { --edge: var(--gold); overflow: visible; }
+.p-sub { color: var(--mist); font-size: 12px; line-height: 1.5; }
+.persona .wing { position: absolute; top: 50%; width: 48px; height: 48px; margin-top: -24px; }
+.persona .wing.l { left: -50px; animation: flap-l .9s steps(2) infinite; transform-origin: 50% 50%; }
+.persona .wing.r { right: -50px; transform: scaleX(-1); animation: flap-r .9s steps(2) infinite; transform-origin: 50% 50%; }
+.gav .halo {
+  position: absolute;
+  left: 50%;
+  top: -12px;
+  width: 28px;
+  height: 8px;
+  margin-left: -14px;
+  box-shadow: inset 0 0 0 2px var(--gold), 0 0 6px rgba(255, 205, 117, .8);
+  animation: bob 1.2s steps(2) infinite;
+}
+.persona.catgirl { --edge: #f7a8d0; --fill: #2e1d33; margin-top: 22px; }
+.persona.catgirl .p-title { color: #f7a8d0; }
+.death-box.revived::after { border-color: var(--gold); }
+
+/* 吟游诗人：羊皮纸卷轴，上下两根木轴，墨色的字 */
+.msg.sp-bard .bubble.px-box, .persona.bard { --edge: #8a5a3c; --fill: #e8d5a3; color: var(--ink); }
+.msg.sp-bard .bubble .name, .persona.bard .p-title { color: #8a3c2c; }
+.persona.bard .p-sub, .persona.bard .p-tip { color: #5a4636; }
+.msg.sp-bard .bubble .text { font-size: 15px; line-height: 1.9; letter-spacing: .08em; }
+.msg.sp-bard .bubble.px-box::before, .msg.sp-bard .bubble.px-box::after { /* 卷轴的木轴 */
+  content: "";
+  position: absolute;
+  left: -10px;
+  right: -10px;
+  height: 6px;
+  background: #8a5a3c;
+  box-shadow: inset 0 -2px 0 #5a3a26;
+}
+.msg.sp-bard .bubble.px-box::before { top: -9px; }
+.msg.sp-bard .bubble.px-box::after { bottom: -9px; }
+.msg.sp-bard .bubble { margin-block: 12px; }
+
+/* 赌徒：绿色赌桌的绒布、金边，角上一颗骰子、一枚金币 */
+.msg.sp-gambler .bubble.px-box, .persona.gambler {
+  --edge: var(--gold);
+  --fill: #1f5e3a;
+  background: repeating-linear-gradient(45deg, rgba(0, 0, 0, .08) 0 2px, transparent 2px 6px), var(--fill);
+}
+.msg.sp-gambler .bubble .name, .persona.gambler .p-title { color: var(--gold); }
+
+/* 通灵者：深紫的夜色，中间一团幽光，角上一只会眨的眼睛 */
+.msg.sp-medium .bubble.px-box, .persona.medium {
+  --edge: #c28cd9;
+  --fill: #24163a;
+  background: radial-gradient(ellipse 60% 80% at 50% 50%, rgba(194, 140, 217, .22), transparent 70%), var(--fill);
+}
+.msg.sp-medium .bubble .name, .persona.medium .p-title { color: #e0b8f0; }
+
+/* 信徒：彩色玻璃窗一样的边框，角上一支烛台 */
+.msg.sp-believer .bubble.px-box, .persona.believer { --edge: var(--gold); --fill: #2a2438; }
+.msg.sp-believer .bubble.px-box::before, .persona.believer::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  padding: 4px;
+  background: repeating-linear-gradient(90deg, #b13e53 0 12px, #3b5dc9 12px 24px, #ffcd75 24px 36px, #38b764 36px 48px, #5d275d 48px 60px);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: .85;
+  pointer-events: none;
+}
+.msg.sp-believer .bubble .name, .persona.believer .p-title { color: var(--gold); }
+
+/* 地缚灵体质：青灰色、雾蒙蒙的，框下面垂着一截锁链 */
+.msg.sp-earthbound .bubble.px-box, .persona.earthbound {
+  --edge: #5f8fa0;
+  --fill: #1b2a36;
+  background: linear-gradient(to top, rgba(115, 239, 247, .12), transparent 60%), var(--fill);
+}
+.msg.sp-earthbound .bubble .name, .persona.earthbound .p-title { color: var(--cyan); }
+.msg.sp-earthbound .bubble { margin-bottom: 14px; }
+
+/* 恋人：红边，两颗心；悄悄话照旧是紫色 */
+.msg.sp-lover .bubble.px-box, .persona.lover { --edge: #ff9ab0; }
+.msg.sp-lover:not(.whisper) .bubble.px-box { --fill: #3a2236; }
+.msg.sp-lover .bubble .name, .persona.lover .p-title { color: #ff9ab0; }
+
+/* 地缚灵的低语：死者的头像飘着，半透明的虚线框 */
+.msg.sp-haunt .avatar { --edge: var(--steel); animation: float 2.4s steps(4) infinite; }
+.msg.sp-haunt .avatar .sprite { filter: grayscale(.4) brightness(1.1); opacity: .55; }
+.msg.sp-haunt .bubble.px-box {
+  --fill: rgba(115, 239, 247, .07);
+  --edge: transparent;
+  box-shadow: none;
+  border: 2px dashed rgba(115, 239, 247, .55);
+}
+.msg.sp-haunt .bubble .name { color: var(--cyan); }
+.msg.sp-haunt .bubble .text { color: #c9eef2; font-style: italic; letter-spacing: .06em; }
+
+/* 一对恋人同时降生 */
+.lovers-card {
+  --fill: #2a1830;
+  --edge: #ff9ab0;
+  --g-icon: 36px;
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: min(100%, 320px);
+  margin: var(--px) auto;
+  padding: 10px 14px 12px;
+  text-align: center;
+  background: radial-gradient(ellipse 50% 60% at 50% 45%, rgba(255, 154, 176, .25), transparent 70%), var(--fill);
+  animation: pop .24s steps(3) both;
+}
+.l-title { font-size: 13px; letter-spacing: .4em; margin-right: -.4em; color: #ff9ab0; }
+.l-row { display: flex; align-items: center; gap: 10px; }
+.l-heart { width: 24px; height: 24px; animation: bob .8s steps(2) infinite; }
+.l-names { font-size: 15px; color: var(--paper); }
+.l-sub { font-size: 12px; color: var(--mist); }
+
+/* 通灵者看见的轮廓 */
+.vision-card {
+  --fill: #1c1230;
+  --edge: #c28cd9;
+  align-self: center;
+  width: min(100%, 460px);
+  margin: var(--px) auto;
+  padding: 10px 14px 12px;
+  background: radial-gradient(circle at 50% 0, rgba(194, 140, 217, .3), transparent 65%), var(--fill);
+  animation: pop .24s steps(3) both;
+}
+.v-head { display: flex; align-items: center; justify-content: center; gap: 10px; color: #e0b8f0; font-size: 14px; }
+.v-head .sprite { width: 24px; height: 24px; animation: flicker 1.6s steps(2) infinite; }
+.v-items { margin: 8px 0 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
+.v-items li { display: flex; flex-direction: column; gap: 2px; }
+.v-line { font-size: 13px; color: var(--mist); }
+.v-line::before { content: "「"; }
+.v-line::after { content: "」"; }
+.v-line .blank { display: inline-block; color: #e0b8f0; text-shadow: 0 0 6px rgba(224, 184, 240, .9); }
+.v-outline { font-size: 14px; color: #e0b8f0; padding-left: 1em; }
+.v-none { font-size: 13px; color: var(--mist); text-align: center; }
+@keyframes dice-roll { 0% { transform: rotate(14deg); } 50% { transform: rotate(-20deg) translateY(-2px); } }
+@keyframes flap-l { 50% { transform: rotate(14deg); } }
+@keyframes flap-r { from { transform: scaleX(-1); } 50% { transform: scaleX(-1) rotate(14deg); } to { transform: scaleX(-1); } }
+
 /* ---------- 心想：选手脑子里的话，只有观众看得见。虚线、暗色、没有头像，和说出口的话区分开 ---------- */
 .avatar-gap { flex: none; width: calc(var(--av) + 8px + var(--px) * 2); height: 1px; }
 .sp-thought { margin-bottom: -8px; }
@@ -1114,7 +1322,9 @@ button.hall-card:focus-visible { outline: var(--px) dashed var(--gold); outline-
   .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot,
   .echo-wall, .e-line.shown, .e-line .blank { animation: none; }
   .tape span, .sign, .stage-closed.closing .tape-a, .stage-closed.closing .tape-b, .stage-closed.closing .sign,
-  .vote-tally.bump, .vote-pop.show, .hall-crown, .hall-spark, .hall-cloud, .hall-rain { animation: none; }
+  .vote-tally.bump, .vote-pop.show, .hall-crown, .hall-spark, .hall-cloud, .hall-rain, .persona .wing.l, .gav .halo { animation: none; }
+  .deco, .msg.sp-haunt .avatar, .lovers-card, .l-heart, .vision-card, .v-head .sprite { animation: none; }
+  .persona .wing.r { animation: none; transform: scaleX(-1); }
 }
 .instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona,
-.instant .echo-wall, .instant .e-line.shown { animation: none; }
+.instant .echo-wall, .instant .e-line.shown, .instant .lovers-card, .instant .vision-card { animation: none; }

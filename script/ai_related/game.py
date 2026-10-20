@@ -18,6 +18,16 @@ Mechanics (the *content* of the world lives in words/<world>/, see world.py):
  6. Each death is written to the graveyard: avatar, name, cause, and a biography generated at death.
  7. If the world has a judge.md, an LLM judge applies the secret rules after every action and at the end
     of every round. No rule is hard-coded here. If it has an oracle.md, an LLM oracle grades declarations.
+ 8. Rare births: with a small chance the newcomer is instead the dead player the audience liked most, revived
+    with the memory of their last life (rebuilt from transcript.jsonl). Otherwise a newcomer may be born with a rare
+    identity (config.SPECIAL_CHANCES, each with its own prompt in prompts/player/<name>.md):
+      catgirl, bard, believer   - only a way of speaking and acting
+      gambler                   - bets their own lifespan at birth: won = 1.5x, lost = 0.5x
+      medium                    - sees the outline (strokes, structure, radical) of every word rubbed out on the echo wall
+      earthbound                - does not leave at death: haunts the field as a ghost that now and then whispers one line
+                                  to the living (judged like anything else: a forbidden word disperses it)
+    Two players born at the same moment may be lovers (LOVERS_CHANCE): when one dies, the other gets one last action
+    and then dies of a broken heart.
 """
 import json
 import random
@@ -31,9 +41,9 @@ from typing import Iterator
 
 from .agent import Agent, JSONReplyError
 from .client import DeepSeekClient
-from .config import (DEFAULT_MODEL, LIFESPAN_MAX, LIFESPAN_MEAN, LIFESPAN_MIN, LIFESPAN_SD,
-                     SPAWN_IF_TWO, SPAWN_TWO_IF_ONE, SUMMARY_MODEL)
-from .judge import Judge, Oracle, Verdict
+from .config import (DEFAULT_MODEL, LIFESPAN_MAX, LIFESPAN_MEAN, LIFESPAN_MIN, LIFESPAN_SD, LOVERS_CHANCE,
+                     REVIVE_CHANCE, SPAWN_IF_TWO, SPAWN_TWO_IF_ONE, SPECIAL_CHANCES, SUMMARY_MODEL)
+from .judge import Judge, Oracle, Verdict, _ask_json
 from .prompts import Prompts, fill
 from .votes import VoteBox
 from .world import load_world
@@ -44,6 +54,15 @@ NAME_MAX = 12
 MAX_ON_FIELD = 2
 ECHO_MAX = 5  # how many dead players' last lines the echo wall shows
 AVATARS = [f"p{i}" for i in range(8)]  # must match the avatars in web/js/sprites.js
+# rare identities with a face of their own (also in sprites.js), never drawn for anyone else
+SPECIAL_AVATARS = {"catgirl": "cat", "bard": "bard", "gambler": "gambler", "medium": "medium", "believer": "believer",
+                   "earthbound": "earthbound"}
+GHOST_EVERY = 3  # an earthbound ghost whispers every this many rounds...
+GHOST_MAX = 4  # ...this many times at most...
+GHOST_ROUNDS = 12  # ...and fades away after this many rounds
+GHOST_CHARS = 30
+PAST_LINES = 60  # how much of their last life a revived player remembers (lines, newest kept)
+PAST_CHARS = 6000
 
 def player_rules(prompts: Prompts, actions: list[str]) -> str:
     listed = "\n".join(f"  {i}. {prompts.strings('player')['rule_actions'][a]}" for i, a in enumerate(actions, 1))
@@ -77,10 +96,26 @@ class Player:
     dying_echo: str = ""  # the judge's excerpt of last_line that got them executed (a shorter echo)
     log: list = field(default_factory=list)  # (kind, text) used to write the obituary
     personality: dict | None = None  # {"virtue": {name, tip, desc}, "flaw": {...}}, drawn at birth
+    special: str | None = None  # "revived" | "lover" | one of SPECIAL_CHANCES ("catgirl", "bard", ...) | None
+    life: int = 1  # which life this is (a revived player is on their second, third...)
+    revived_from: int | None = None  # the grave record of the life before
+    lover: "Player | None" = field(default=None, repr=False, compare=False)
+    heartbroken: bool = False  # the lover died: one last action, then this one dies too
+
+    def tags(self) -> dict:
+        """What the page needs to draw a special player differently (sent with every event about them)."""
+        if not self.special:
+            return {}
+        out = {"special": self.special}
+        if self.special == "revived":
+            out.update(life=self.life, revived_from=self.revived_from)
+        if self.lover:
+            out["lover"] = self.lover.name
+        return out
 
     def public(self) -> dict:
         return {"id": self.id, "name": self.name, "avatar": self.avatar, "age": self.age, "personality": shown(self.personality),
-                "born_round": self.born_round}
+                "born_round": self.born_round, **self.tags()}
 
 
 ECHO_CLIP = 60
@@ -151,12 +186,20 @@ class Game:
                  lifespan_mean: float = LIFESPAN_MEAN, lifespan_sd: float = LIFESPAN_SD,
                  model: str = DEFAULT_MODEL, judge_model: str = SUMMARY_MODEL, round_delay: float = 0.0,
                  max_players: int | None = None, max_rounds: int | None = None,
-                 budget_usd: float | None = None):
+                 budget_usd: float | None = None, revive_chance: float = REVIVE_CHANCE,
+                 special_chances: dict[str, float] | None = None, lovers_chance: float = LOVERS_CHANCE):
         self.client = client or DeepSeekClient()
         self.model = model
         self.rng = random.Random(seed)
         self.lifespan_mean, self.lifespan_sd = lifespan_mean, lifespan_sd
         self.round_delay = round_delay
+        self.revive_chance, self.lovers_chance = revive_chance, lovers_chance
+        self.special_chances = {**SPECIAL_CHANCES, **(special_chances or {})}
+        unknown = set(self.special_chances) - set(SPECIAL_AVATARS)
+        if unknown:
+            raise ValueError(f"unknown special identities: {sorted(unknown)}")
+        self.ghost: dict | None = None  # the earthbound ghost haunting the field: {"p", "since", "next", "whispers", "record"}
+        self._outlines: dict[str, str] = {}  # what a medium sees of a rubbed-out word, asked once per word
         self.max_players, self.max_rounds, self.budget_usd = max_players, max_rounds, budget_usd
         self.data_dir = Path(data_dir)
         self.data_dir.mkdir(parents=True, exist_ok=True)
@@ -243,11 +286,14 @@ class Game:
                     break
                 if self.round_delay:
                     time.sleep(self.round_delay)
-                if self._alive(p) and p.age >= p.lifespan:
+                if self._alive(p) and p.heartbroken:  # that was the last thing they did without their lover
+                    yield from self._kill([(p, "heartbreak", self.H["heartbreak_reason"], "")])
+                elif self._alive(p) and p.age >= p.lifespan:
                     yield from self._kill([(p, "natural", "", "")])
             if self.stop_reason or self.won:
                 break
             yield from self._round_end()
+            yield from self._ghost_turn()
         if self.won:
             self.stop_reason = "victory"
         elif not self.stop_reason:
@@ -271,11 +317,20 @@ class Game:
         pred = self.graveyard[-1] if self.graveyard else None  # the player who died most recently
         if pred and pred.get("kind") == "victory":
             pred = None  # a winner leaves no last words behind (the loop was closed)
+        lovers = n == 2 and self.rng.random() < self.lovers_chance  # born at the same moment, and for each other
         newcomers = []
         for _ in range(n):
-            newcomers.append((yield from self._spawn_one(pred)))
+            newcomers.append((yield from self._spawn_one(pred, lover=lovers)))
+        if lovers:
+            a, b = newcomers
+            a.lover, b.lover = b, a
+            for q in newcomers:
+                q.agent.insert_context("system", fill(self.prompts.text("player/lover"), name=q.lover.name), pinned=True)
+            yield self._emit({"type": "lovers", "players": [{"id": q.id, "name": q.name, "avatar": q.avatar} for q in newcomers],
+                              "round": self.round})
         # Tell everyone who is new, then let the environment set the scene.
         names = "、".join(f"「{p.name}」" for p in newcomers)
+        back = "".join(fill(self.P["partner_revived"], name=p.name) for p in newcomers if p.special == "revived")
         for q in self.players:
             others = [o for o in self.players if o is not q]
             who = "、".join(f"「{o.name}」" for o in others)
@@ -289,10 +344,12 @@ class Game:
                         speaker="系统")
             else:
                 q.agent.insert_context(
-                    "user", fill(self.P["partner_arrived"], names=names, count=len(self.players), who=who, tail=tail),
+                    "user", fill(self.P["partner_arrived"], names=names, count=len(self.players), who=who, tail=tail) + back,
                     speaker="系统")
         everyone = "、".join(f"「{p.name}」" for p in self.players)
         note = fill(self.E["newcomers"], names=names, count=len(self.players), everyone=everyone)
+        note += "".join(fill(self.E["revived"], name=p.name) for p in newcomers if p.special == "revived")
+        note += "".join(fill(self.E["believer"], name=p.name) for p in newcomers if p.special == "believer")
         if self.world.echo_wall:
             note += self._echo_text()
             self._echo_all = True
@@ -312,32 +369,238 @@ class Game:
         items = "；".join(fill(self.E["erased_item"], i=i, word=w) for i, w in erased)
         return fill(self.E["erased_memo"], items=items)
 
-    def _spawn_one(self, pred: dict | None) -> Iterator[dict]:
+    def _roll_special(self) -> str | None:
+        """At most one rare identity per newcomer."""
+        roll, acc = self.rng.random(), 0.0
+        for name, chance in self.special_chances.items():
+            acc += chance
+            if roll < acc:
+                return name
+        return None
+
+    def _spawn_one(self, pred: dict | None, lover: bool = False) -> Iterator[dict]:
         pid = self.next_id
         self.next_id += 1
         self.spawned += 1
         agent = Agent(f"选手{pid}", self.player_prompt, client=self.client, model=self.model, temperature=1.0,
                       prompts=self.prompts)
-        pers = None
-        if self.world.personalities:
+        # a rare birth: the audience's favourite comes back from the dead, or someone with a rare identity is born
+        past = None if lover or self.rng.random() >= self.revive_chance else self._revival_candidate()
+        special = "lover" if lover else "revived" if past else self._roll_special()
+        pers = self._restore_personality(past) if past else None
+        if self.world.personalities and not pers:
             avoid = {x["name"] for q in self.players if q.personality for x in q.personality.values()}
             avoid |= {x["name"] for x in ((pred or {}).get("personality") or {}).values()}
             pers = pick_personality(self.rng, self.world.personalities, avoid)
+        if pers:
             agent.insert_context("system", personality_prompt(self.prompts, pers), pinned=True)
-        inherited = bool(pred and pred.get("last_words"))
+        if special in SPECIAL_AVATARS:
+            agent.insert_context("system", self.prompts.text(f"player/{special}"), pinned=True)
+        if past:
+            agent.insert_context("system", self._revival_prompt(past), pinned=True)
+        inherited = bool(pred and pred.get("last_words")) and not (past and pred["id"] == past["id"])
         if inherited:  # only the player who died right before this birth hands anything down
             agent.insert_context("system", fill(self.P["inherited_last_words"], name=pred["name"], text=pred["last_words"]),
                                  pinned=True)
-        name, intro = self._choose_name(agent, pid, bool(pers))
+        if past:  # the same name and face as before: nothing new to pick
+            name, avatar = past["name"], past["avatar"]
+            intro = self._intro(agent, self.P["revived_intro"])
+        else:
+            name, intro = self._choose_name(agent, pid, bool(pers))
+            taken = {q.avatar for q in self.players} | ({pred["avatar"]} if pred else set())
+            avatar = SPECIAL_AVATARS.get(special) or self.rng.choice([a for a in AVATARS if a not in taken] or AVATARS)
         agent.name = name
-        taken = {q.avatar for q in self.players} | ({pred["avatar"]} if pred else set())
-        avatar = self.rng.choice([a for a in AVATARS if a not in taken] or AVATARS)
-        player = Player(pid, agent, name, avatar, sample_lifespan(self.rng, self.lifespan_mean, self.lifespan_sd),
-                        born_round=self.round + 1, personality=pers)
+        lifespan = sample_lifespan(self.rng, self.lifespan_mean, self.lifespan_sd)
+        gamble = None
+        if special == "gambler":  # bets the lifespan at birth (never told how long it is, only that it grew or shrank)
+            gamble = "won" if self.rng.random() < 0.5 else "lost"
+            lifespan = min(LIFESPAN_MAX, round(lifespan * 1.5)) if gamble == "won" else max(LIFESPAN_MIN, round(lifespan * 0.5))
+            agent.insert_context("system", self.P[f"gambler_{gamble}"], pinned=True)
+        player = Player(pid, agent, name, avatar, lifespan, born_round=self.round + 1, personality=pers, special=special)
+        if past:
+            player.life, player.revived_from = past.get("life", 1) + 1, past["id"]
+            past["revived_as"] = pid  # one grave, one return
+            self._save_graveyard()
         self.players.append(player)
-        yield self._emit({"type": "spawn", "player": player.public(), "inherited_last_words": inherited,
-                          "personality": shown(pers), "intro": intro, "round": self.round})
+        event = {"type": "spawn", "player": player.public(), "inherited_last_words": inherited,
+                 "personality": shown(pers), "intro": intro, "round": self.round}
+        if past:
+            event["revived"] = {"from": past["id"], "life": player.life, "died_round": past.get("died_round"),
+                                "kind": past.get("kind")}
+        if gamble:
+            event["gamble"] = gamble
+        yield self._emit(event)
+        if special == "medium":  # opens their eyes on the wall as it is now
+            yield from self._medium_vision(player, [(line, w) for line, w in self.echoes if w])
         return player
+
+    # ---- the medium: the outline of a rubbed-out word ------------------------
+    def _outline(self, word: str) -> str:
+        """Strokes, structure and radical of a word, without the word itself (asked once per word)."""
+        if word not in self._outlines:
+            S = self.prompts.strings("medium")
+            data = _ask_json(self.client, self.prompts.text("medium/system"), fill(self.prompts.text("medium/request"), word=word),
+                             SUMMARY_MODEL, "medium") or {}
+            outline = str(data.get("outline") or "").strip()
+            if not outline or word in outline:  # it must never spell the word out
+                outline = S["unclear"]
+            self._outlines[word] = outline
+        return self._outlines[word]
+
+    def _medium_vision(self, p: Player, erased: list[tuple[str, str]]) -> Iterator[dict]:
+        """Tell a medium what they see in the blanks of these wall lines; the audience sees it too (never the word)."""
+        S = self.prompts.strings("medium")
+        items = [{"line": line, "outline": self._outline(word)} for line, word in erased]
+        text = "\n".join(fill(S["item"], line=i["line"], outline=i["outline"]) for i in items) or S["nothing"]
+        p.agent.insert_context("user", fill(S["vision"], items=text), speaker="系统")
+        yield self._emit({"type": "vision", "player_id": p.id, "name": p.name, "avatar": p.avatar, "items": items,
+                          "round": self.round, **p.tags()})
+
+    # ---- the earthbound: a ghost that stays ----------------------------------
+    def _haunt(self, p: Player, record: dict) -> Iterator[dict]:
+        self.ghost = {"p": p, "since": self.round, "next": self.round + 1, "whispers": 0, "record": record}
+        record["ghost"] = {"whispers": 0}
+        self._save_graveyard()
+        p.agent.insert_context("user", fill(self.P["ghost_awaken"], max=GHOST_CHARS), speaker="系统")
+        yield self._emit({"type": "haunt", "player_id": p.id, "name": p.name, "avatar": p.avatar, "round": self.round,
+                          **p.tags()})
+
+    def _ghost_turn(self) -> Iterator[dict]:
+        """Every few rounds the ghost whispers one line to someone alive. It is judged like a living player's words."""
+        g = self.ghost
+        if not g or not self.players:
+            return
+        p = g["p"]
+        if self.round - g["since"] >= GHOST_ROUNDS or g["whispers"] >= GHOST_MAX:
+            yield from self._ghost_gone("faded")
+            return
+        if self.round < g["next"]:
+            return
+        g["next"] = self.round + GHOST_EVERY
+        names = "、".join(f"「{q.name}」" for q in self.players)
+        try:
+            d = p.agent.get_json_reply(
+                fill(self.P["ghost_turn"], names=names, max=GHOST_CHARS), example=self.P["ghost_example"],
+                validator=lambda d: isinstance(d, dict) and isinstance(d.get("content"), str) and bool(d["content"].strip()),
+                commit=False, max_tokens=512)
+        except JSONReplyError:
+            return
+        text = d["content"].strip()[:GHOST_CHARS]
+        target = next((q for q in self.players if q.name in str(d.get("to") or "")), self.players[0])
+        p.agent.insert_context("assistant", json.dumps({"to": target.name, "content": text}, ensure_ascii=False))
+        g["whispers"] += 1
+        g["record"]["ghost"]["whispers"] = g["whispers"]
+        self._save_graveyard()
+        yield self._emit({"type": "message", "who": "ghost", "name": p.name, "avatar": p.avatar, "player_id": p.id,
+                          "to": target.name, "text": text, "round": self.round, **p.tags()})
+        target.agent.insert_context("user", fill(self.P["ghost_whisper_heard"], name=p.name, content=text))
+        target.log.append(("other", fill(self.H["story_ghost"], name=p.name, content=text)))
+        if not self.judge:
+            return
+        verdicts = self.judge.check_action(state=self._state_text(), player=p.name, content=text,
+                                           action_text=self.J["action_text"]["ghost_whisper"], names={p.name})
+        if verdicts:  # a ghost can die a second time: it is torn apart
+            ids = list(dict.fromkeys(i for v in verdicts for i in self._match_scripture(v.rule)))
+            by_id = {e["id"]: e for e in self.scripture}
+            for sid in ids:
+                self.scripture_counts[sid] = self.scripture_counts.get(sid, 0) + 1
+                yield self._emit({"type": "scripture", "id": sid, "title": by_id[sid]["title"],
+                                  "count": self.scripture_counts[sid], "round": self.round})
+            if ids:
+                self._save_scripture()
+            yield from self._ghost_gone("dispersed", verdicts[0].observation)
+
+    def _ghost_gone(self, reason: str, observation: str = "") -> Iterator[dict]:
+        """reason: "dispersed" (said something it must not), "faded" (its time ran out), "freed" (the loop was closed)."""
+        g, self.ghost = self.ghost, None
+        p = g["p"]
+        g["record"]["ghost"] = {"whispers": g["whispers"], "end": reason}
+        self._save_graveyard()
+        note = self.P.get(f"ghost_{reason}")
+        for q in self.players:
+            if note:
+                q.agent.insert_context("user", fill(note, name=p.name), speaker="系统")
+        yield self._emit({"type": "ghost_gone", "player_id": p.id, "name": p.name, "avatar": p.avatar, "reason": reason,
+                          "observation": observation, "round": self.round})
+
+    # ---- coming back from the dead -------------------------------------------
+    def _revival_candidate(self) -> dict | None:
+        """The dead player with the most 👍 (at least one) who has not come back already. A winner is free and stays
+        gone; somebody whose face or name is on the field right now has to wait."""
+        taken = {q.avatar for q in self.players} | set(SPECIAL_AVATARS.values())  # a rare face comes back only as itself
+        names = {q.name for q in self.players}
+        best, most = None, 0
+        for r in self.graveyard:  # oldest first, so on a tie the one who died more recently wins
+            up = (r.get("votes") or {}).get("up", 0)
+            if (up > 0 and up >= most and r.get("kind") != "victory" and not r.get("revived_as")
+                    and r.get("avatar") not in taken and r.get("name") not in names):
+                best, most = r, up
+        return best
+
+    def _restore_personality(self, past: dict) -> dict | None:
+        """The same virtue and flaw as before (the grave only keeps the names; the descriptions come from the pool)."""
+        pool, old = self.world.personalities, past.get("personality")
+        if not (pool and old):
+            return None
+        found = {k: next((e for e in pool[f"{k}s"] if e["name"] == (old.get(k) or {}).get("name")), None)
+                 for k in ("virtue", "flaw")}
+        return found if all(found.values()) else None
+
+    def _past_life(self, past: dict) -> tuple[list[str], str]:
+        """What a revived player remembers: the lines they said and heard in their last life, rebuilt from transcript.jsonl
+        (the newest are kept), and the last thing they did before they died."""
+        P, pid, name = self.P, past["id"], past["name"]
+        path = self.data_dir / "transcript.jsonl"
+        if not path.exists():
+            return [], ""
+        lines: list[str] = []
+        last, alive = "", False
+        with path.open(encoding="utf-8") as f:
+            for raw in f:
+                try:
+                    e = json.loads(raw)
+                except ValueError:
+                    continue
+                t = e.get("type")
+                if t == "spawn" and (e.get("player") or {}).get("id") == pid:
+                    lines, last, alive = [], "", True  # an id can be handed out again after a restart: the last birth counts
+                    continue
+                if not alive:
+                    continue
+                if t == "death" and (e.get("record") or {}).get("id") == pid:
+                    break
+                text = str(e.get("text") or "").strip()
+                if t not in ("message", "lastwords", "guess") or not text:
+                    continue
+                if e.get("player_id") == pid:
+                    last = text
+                    key = {"lastwords": "past_last_words", "guess": "past_guess"}.get(t) or (
+                        "past_whisper_out" if e.get("to") else "past_self")
+                    lines.append(fill(P[key], text=text, name=e.get("to") or ""))
+                elif e.get("who") == "env":
+                    lines.append(fill(P["past_env"], text=text))
+                elif t == "message" and e.get("to") in (None, "", name):  # the partner out loud, or whispering to them
+                    lines.append(fill(P["past_whisper_in" if e.get("to") else "past_other"], name=e.get("name") or "", text=text))
+        lines = lines[-PAST_LINES:]
+        while len(lines) > 1 and sum(map(len, lines)) > PAST_CHARS:
+            lines.pop(0)
+        return lines, last
+
+    def _revival_prompt(self, past: dict) -> str:
+        """You came back: who you were, how you died (the very line, if a line killed you), and what you remember."""
+        P = self.P
+        lines, last = self._past_life(past)
+        kind = past.get("kind") or "natural"
+        line = past.get("fatal_line", last if kind in ("execution", "wrong_guess") else "")
+        key = kind if kind in P["revived_death"] else "natural"
+        if kind == "execution" and not line:
+            key = "execution_silent"
+        death = fill(P["revived_death"][key], line=line)
+        if past.get("observation"):
+            death += fill(P["revived_scene"], observation=past["observation"])
+        return fill(self.prompts.text("player/revived"), name=past["name"], life=past.get("life", 1) + 1,
+                    born=past.get("born_round", "?"), died=past.get("died_round", "?"), death=death,
+                    memory="\n".join(lines) or P["revived_no_memory"])
 
     def _choose_name(self, agent: Agent, pid: int, with_intro: bool = False) -> tuple[str, str]:
         """The player names themselves and, when they have a personality, says in one private thought what kind of person they are."""
@@ -357,19 +620,20 @@ class Game:
             name = d["name"].strip()
         except JSONReplyError:
             name = f"无名氏{pid}"
-        intro = ""
-        if with_intro:
-            # a separate call that is NOT written into the player's memory: the monologue is full of first-person
-            # sentences, and a player that has just "said" a few of them would copy the habit into what it says out loud
-            try:
-                d = agent.get_json_reply(
-                    self.P["intro"], example=self.P["intro_example"],
-                    validator=lambda d: isinstance(d, dict) and isinstance(d.get("intro"), str) and bool(d["intro"].strip()),
-                    commit=False, max_tokens=256)
-                intro = d["intro"].strip()
-            except JSONReplyError:
-                pass
-        return name, intro
+        return name, (self._intro(agent, self.P["intro"]) if with_intro else "")
+
+    def _intro(self, agent: Agent, instruction: str) -> str:
+        """One private thought for the entrance card. A separate call that is NOT written into the player's memory: the
+        monologue is full of first-person sentences, and a player that has just "said" a few of them would copy the habit
+        into what it says out loud."""
+        try:
+            d = agent.get_json_reply(
+                instruction, example=self.P["intro_example"],
+                validator=lambda d: isinstance(d, dict) and isinstance(d.get("intro"), str) and bool(d["intro"].strip()),
+                commit=False, max_tokens=256)
+            return d["intro"].strip()
+        except JSONReplyError:
+            return ""
 
     # ---- one action --------------------------------------------------------
     def _act(self, p: Player) -> Iterator[dict]:
@@ -391,7 +655,7 @@ class Game:
             p.log.append(("thought", thought))
         p.age += 1
         self.action_log.append({"round": self.round, "player": p.name, "action": action})
-        base = {"name": p.name, "avatar": p.avatar, "age": p.age, "player_id": p.id, "round": self.round}
+        base = {"name": p.name, "avatar": p.avatar, "age": p.age, "player_id": p.id, "round": self.round, **p.tags()}
         if thought:
             base["thought"] = thought
 
@@ -543,6 +807,8 @@ class Game:
                         for e in self.action_log)
         victims = self._victims(self.judge.check_round(state=self._state_text(completed=True), log=log,
                                                        names={q.name for q in self.players}))
+        for p, *_ in victims:
+            p.fatal_text = ""  # killed by time, not by anything they said
         if victims:
             yield from self._kill(victims)
 
@@ -574,6 +840,11 @@ class Game:
                       "born_round": p.born_round, "died_round": self.round,
                       "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
             record["votes"] = self.votes.close(p.id)
+            record.update(p.tags())
+            if kind in ("execution", "wrong_guess") and p.fatal_text:
+                record["fatal_line"] = p.fatal_text  # told to them if they ever come back
+            if observation:
+                record["observation"] = observation
             if p.personality:
                 record["personality"] = shown(p.personality)
             if rest and rest[0]:
@@ -595,7 +866,15 @@ class Game:
                 alone = self.P["death_alone"] if len(self.players) == 1 else ""
                 scene = fill(self.P["death_scene"], observation=observation) if observation else ""
                 q.agent.insert_context("user", fill(self.P["death"], name=p.name) + scene + alone, speaker="系统")
+            if p.lover and self._alive(p.lover):  # the one left behind has a single action left
+                p.lover.heartbroken = True
+                p.lover.agent.insert_context("user", fill(self.P["lover_died"], name=p.name), speaker="系统")
             yield self._emit({"type": "death", "record": record, "round": self.round})
+            if p.special == "earthbound" and self.ghost is None:
+                yield from self._haunt(p, record)
+            if erased:
+                for m in [q for q in self.players if q.special == "medium"]:
+                    yield from self._medium_vision(m, [(echo, erased)])
         count = self._spawn_count(len(self.players) + 1)
         if count:
             yield from self._spawn_players(count)
@@ -606,11 +885,16 @@ class Game:
         """The truth was declared: the loop is closed for everyone who is still on the field."""
         freed = [q.name for q in self.players if q is not p]
         self.players = []
+        if self.ghost:  # the loop is closed: even the ghost may go
+            yield from self._ghost_gone("freed")
         _, biography = self._obituary(p, "victory", "")
         record = {"id": p.id, "name": p.name, "avatar": p.avatar, "rounds": p.age, "cause": self.H["victory_cause"],
                   "biography": biography, "last_words": p.last_words, "kind": "victory",
                   "born_round": p.born_round, "died_round": self.round,
-                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds"), "votes": self.votes.close(p.id)}
+                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds"), "votes": self.votes.close(p.id),
+                  **p.tags()}
+        if p.personality:
+            record["personality"] = shown(p.personality)
         self.graveyard.append(record)
         self._save_graveyard()
         self.won = True
@@ -627,6 +911,7 @@ class Game:
         request = fill(
             self.prompts.text("historian/request"), name=p.name, age=p.age, ending=H["kind_text"][kind], story=story,
             personality=fill(H["personality"], virtue=pers["virtue"]["name"], flaw=pers["flaw"]["name"]) if pers else "",
+            special=fill(H["special"][p.special], life=p.life, lover=p.lover.name if p.lover else "") if p.special else "",
             detail=fill(H["detail"], reason=reason) if reason else "",
             last_words=fill(H["last_words_yes"], text=p.last_words) if p.last_words else H["last_words_no"])
         messages = [

@@ -7,7 +7,7 @@
   "state_pair_ongoing": "（不含正在进行的这一轮）",
   "state_single": "场上只有一位选手，没有同场",
 
-  "action_text": {"speak": "说话/做事", "last_words": "留下遗言", "end_life": "主动结束自己的生命（end_life）", "guess": "向世界宣告真相"},
+  "action_text": {"speak": "说话/做事", "last_words": "留下遗言", "end_life": "主动结束自己的生命（end_life）", "guess": "向世界宣告真相", "ghost_whisper": "（已经死去、化作地缚灵的他）对一位活人说了一句悄悄话"},
   "round_log_line": "第 {round} 轮 · 「{player}」：{action}",
   "round_log_empty": "（无）",
 

@@ -4,6 +4,16 @@
   "example_death": {"cause": "一句话死因，30 字以内", "biography": "150~300 字的第三人称生平，按时间顺序"},
   "example_victory": {"cause": "一句话写下他的功绩，30 字以内", "biography": "150~300 字的第三人称生平，按时间顺序"},
   "personality": "性格：优点「{virtue}」、缺点「{flaw}」（让生平里的行为和这两点相呼应）\n",
+  "special": {
+    "revived": "这是他的第 {life} 次生命：他曾经死在这里，又带着前世的记忆复活归来（让生平写出这段轮回）。\n",
+    "catgirl": "她是一只猫娘：长着猫耳和尾巴，说话爱带「喵」（让生平带上一点猫的味道）。\n",
+    "bard": "他是一位吟游诗人，只用诗句说话（生平里可以引用他的诗）。\n",
+    "earthbound": "他是地缚灵体质：死后不会离开，会化作地缚灵在这里徘徊。\n",
+    "gambler": "他是一个赌徒，出生时就押上了自己的寿命（让生平写出他的赌性）。\n",
+    "medium": "他是一位通灵者，能看见回声墙上被抹掉的字的轮廓。\n",
+    "believer": "他是一位虔诚的信徒，把这个世界当作神明崇拜。\n",
+    "lover": "他和同时降生的「{lover}」是一对恋人。\n"
+  },
   "detail": "\n具体情况：{reason}",
   "last_words_yes": "是——{text}",
   "last_words_no": "没有",
@@ -13,9 +23,11 @@
     "execution": "触犯了这个世界的规则，被当场处死",
     "suicide": "主动结束了自己的生命",
     "wrong_guess": "向世界宣告了错误或不完整的真相，被当场抹去",
+    "heartbreak": "恋人死去之后，心碎殉情",
     "victory": "完整地宣告了世界的真相，赢下了这场游戏（他是胜利者，而不是死者）"
   },
   "suicide_reason": "主动结束了自己的生命",
+  "heartbreak_reason": "恋人死了，他的心也跟着死了",
 
   "story_labels": {
     "env": "{env}：",
@@ -29,6 +41,7 @@
   "story_whisper": "（悄悄对{name}说）{content}",
   "story_heard_whisper": "{name}（悄悄话）：{content}",
   "story_heard": "{name}：{content}",
+  "story_ghost": "（死去的{name}化作地缚灵，贴着耳朵低语）{content}",
 
   "victory_cause": "完整地宣告了世界的真相，为场上所有人赢下了这场游戏",
   "fallback_cause_natural": "寿数已尽，死因不明",

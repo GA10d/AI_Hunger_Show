@@ -232,6 +232,162 @@
       '............',
     ],
 
+    // —— 猫娘：她自己的头像（和机器人头像同样的版式：第 3 行是主色、第 4 行最左是点缀色、第 10 行是衣服色，
+    //    眼睛、嘴巴的位置也一样，演出区才能给她做表情） ——
+    cat: [
+      '.k........k.',
+      'krk......krk',
+      'krrkkkkkkrrk',
+      '.kooooooook.',
+      'wkowwoowwokw',
+      'wkowkoowkokw',
+      '.kooorroook.',
+      '.kookookook.',
+      '.koookkoook.',
+      '.kkkkkkkkkk.',
+      '....kppk....',
+      '..kkppppkk..',
+    ],
+    // —— 其他稀有身份的头像（同样的版式） ——
+    bard: [ // 吟游诗人：插着羽毛的红色贝雷帽
+      '........yk..',
+      '..kkkkkkykk.',
+      '.krrrrrrrrrk',
+      '.kqqqqqqqqk.',
+      'ykqwwqqwwqky',
+      'ykqwkqqwkqky',
+      '.kqqqqqqqqk.',
+      '.kqqkkkkqqk.',
+      '.kqqqqqqqqk.',
+      '.kkkkkkkkkk.',
+      '....krrk....',
+      '..kkrrrrkk..',
+    ],
+    gambler: [ // 赌徒：荷官的绿色遮阳帽檐，嘴角一歪
+      '............',
+      '.kkkkkkkkkk.',
+      'kggggggggggk',
+      '.kmmmmmmmmk.',
+      'rkmwwmmwwmkr',
+      'rkmwkmmwkmkr',
+      '.kmmmmmmmmk.',
+      '.kmmmmmkkmk.',
+      '.kmmmmmmmmk.',
+      '.kkkkkkkkkk.',
+      '....kggk....',
+      '..kkggggkk..',
+    ],
+    medium: [ // 通灵者：紫色兜帽，额头上一只青色的第三只眼
+      '....kkkk....',
+      '..kkppppkk..',
+      '.kppppppppk.',
+      'kpkmmccmmkpk',
+      'pkmwwmmwwmkp',
+      'pkmwkmmwkmkp',
+      'pkmmmmmmmmkp',
+      'pkmmkkkkmmkp',
+      '.kmmmmmmmmk.',
+      '.kkkkkkkkkk.',
+      '....kppk....',
+      '..kkppppkk..',
+    ],
+    believer: [ // 信徒：棕色修士兜帽，双眼闭着祷告
+      '...kkkkkk...',
+      '..kuuuuuuk..',
+      '.kuuuuuuuuk.',
+      'kukqqqqqqkuk',
+      'ukqqqqqqqqku',
+      'ukqkkqqkkqku',
+      'ukqqqqqqqqku',
+      'ukqqqkkqqqku',
+      '.kqqqqqqqqk.',
+      '.kkkkkkkkkk.',
+      '....kwwk....',
+      '..kkwwwwkk..',
+    ],
+    earthbound: [ // 地缚灵体质：青白的脸、缝起来的嘴，头顶两节锁链
+      '...k....k...',
+      '..ksk..ksk..',
+      '.kkkkkkkkkk.',
+      '.kcccccccck.',
+      'skcwwccwwcks',
+      'skcwkccwkcks',
+      '.kcccccccck.',
+      '.kckckkckck.',
+      '.kcccccccck.',
+      '.kkkkkkkkkk.',
+      '....knnk....',
+      '..kknnnnkk..',
+    ],
+    earthboundGhost: [ // 地缚灵死后灵体化：眼睛变成 × ×（对话区里低语的头像）
+      '...k....k...',
+      '..ksk..ksk..',
+      '.kkkkkkkkkk.',
+      '.kkckcckckk.',
+      'skckcccckcks',
+      'skkckcckckks',
+      '.kcccccccck.',
+      '.kckckkckck.',
+      '.kcccccccck.',
+      '.kkkkkkkkkk.',
+      '....knnk....',
+      '..kknnnnkk..',
+    ],
+    dice: [ // 赌徒的骰子
+      '.kkkkkkk.',
+      'kwwwwwwwk',
+      'kwkwwwkwk',
+      'kwwwwwwwk',
+      'kwwwrwwwk',
+      'kwwwwwwwk',
+      'kwkwwwkwk',
+      'kwwwwwwwk',
+      '.kkkkkkk.',
+    ],
+    chain: [ // 地缚灵的锁链
+      '.mmm..mmm.',
+      'm...mm...m',
+      'm...mm...m',
+      '.mmm..mmm.',
+    ],
+    paw: [ // 猫爪印
+      '.kk..kk.',
+      'krrkkrrk',
+      '.kk..kk.',
+      '........',
+      '.kkrrkk.',
+      'krrrrrrk',
+      'krrrrrrk',
+      '.kkkkkk.',
+    ],
+
+    // —— 复活的人：天使的翅膀（左边那只，右边的镜像翻转）、发言框角上的小十字架 ——
+    wing: [
+      '.........kk.',
+      '.......kkwwk',
+      '.....kkwwwwk',
+      '...kkwwwmwwk',
+      '..kwwwwmwwwk',
+      '.kwwwmwwwwwk',
+      'kwwwmwwwwmwk',
+      '.kwmwwwwmwk.',
+      '..kwwwmwwk..',
+      '...kwmwwk...',
+      '....kwwk....',
+      '.....kk.....',
+    ],
+    holyCross: [
+      '..kkk..',
+      '..kyk..',
+      'kkkykkk',
+      'kyyyyyk',
+      'kkkykkk',
+      '..kyk..',
+      '..kyk..',
+      '..kyk..',
+      '..kkk..',
+    ],
+
     // —— 观众投票 ——
     thumbUp: [ // 👍
       '.....kk.....',
@@ -332,8 +488,13 @@
     return SPRITES[id] ? id : 'p0';
   }
 
+  // 稀有身份的专属头像不在随机分配的 p0~p7 里，各有各的主色
+  const SPECIAL_ACCENTS = {
+    cat: '#f7a8d0', bard: '#e0607a', gambler: '#38b764', medium: '#c28cd9', believer: '#e8d5a3', earthbound: '#73eff7',
+  };
+
   function accent(id) {
-    return AVATAR_ACCENTS[AVATARS.indexOf(avatar(id))];
+    return SPECIAL_ACCENTS[id] || AVATAR_ACCENTS[AVATARS.indexOf(avatar(id))];
   }
 
   function svg(name) {

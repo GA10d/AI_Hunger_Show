@@ -24,11 +24,15 @@ web/
 ## 和后端的接口
 
 - `GET /api/events`（SSE）：事件流。刚连上时先回放最近的历史（带 `replay: true`，页面瞬间渲染），之后是实时事件。
-  `spawn`（选手入场，带 `personality: {virtue, flaw}` 和 `intro` 一句自述）/ `message`（`who: env | player`；选手对同伴说悄悄话时带 `to: 同伴的名字`）/ `lastwords`（遗言）/ `guess`（宣告）/ `verdict`（审判，`correct`）/
+  `spawn`（选手入场，带 `personality: {virtue, flaw}` 和 `intro` 一句自述；复活的人还带 `revived: {from, life, died_round, kind}`）/ `message`（`who: env | player`；选手对同伴说悄悄话时带 `to: 同伴的名字`）/ `lastwords`（遗言）/ `guess`（宣告）/ `verdict`（审判，`correct`）/
   `death`（带完整墓碑记录，含 `personality`）/ `victory`（胜利，同胞获释）/ `stop` / `error`。
   环境的 `message` 在它刚念过回声墙时带 `echo: {lines, new}`：`lines` 是它念的那几行（从新到旧，被抹掉的字已经是「□」，原字不会发给页面），前 `new` 行是刚刻上去的。
   选手的 `message` / `lastwords` / `guess` 还可能带 `thought`（他脑子里想的，只给观众看，页面画成虚线的“心想”气泡）。
   所有事件都带 `session`（后端每次启动不同，页面据此清掉上一次"在世"的人），大部分带 `round`（世界的绝对轮数，显示在舞台标签上）。
+  稀有的选手：选手的事件（`spawn` 的 `player`、`message` / `lastwords` / `guess`、墓碑记录）带 `special: revived | catgirl | bard | gambler | medium | believer | earthbound | lover`，复活的人还带 `life`（第几世）和 `revived_from`（前世的墓碑 id），恋人带 `lover`（另一半的名字）。
+  赌徒的 `spawn` 带 `gamble: won | lost`。几种只属于稀有身份的事件：`lovers`（`players: [{id, name, avatar} × 2]`）/ `vision`（通灵者看见的轮廓，`items: [{line, outline}]`）/
+  `haunt`（地缚灵出现）/ `message` + `who: "ghost"`（地缚灵对 `to` 低语）/ `ghost_gone`（`reason: dispersed | faded | freed`）。死因多了一种 `heartbreak`（殉情）；地缚灵的墓碑记录带 `ghost: {whispers, end}`。
+  稀有身份的头像 `cat` `bard` `gambler` `medium` `believer` `earthbound` 不在 p0~p7 的随机池里。`lastwords` 改写遗言时带 `revised: true`。猫娘用专属头像 `cat`（不在 p0~p7 的随机池里）。
 - `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at, votes`（`votes = {up, down}`，观众的评价，死亡那一刻封存）。
   `kind`：`natural` 寿命耗尽 / `execution` 违规被处决 / `suicide` 自尽 / `wrong_guess` 宣告错误 / `victory` 胜利（墓园里显示成金星）。
 - `GET /api/scripture`：圣言。`[{id, kind: rule | truth, count, title, text}]`，`count` 是这条规则被触发的次数。

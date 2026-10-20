@@ -25,6 +25,19 @@ LIFESPAN_SD = 15
 SPAWN_IF_TWO = 0.25      # two were on the field: chance that one new player is born
 SPAWN_TWO_IF_ONE = 0.10  # one was on the field: chance that two are born (otherwise exactly one)
 
+# Rare births, rolled for every newcomer
+REVIVE_CHANCE = 0.02   # the dead player with the most 👍 comes back instead, with the memory of their last life
+# otherwise at most one rare identity (see game.py; each has its prompt in prompts/player/<name>.md)
+SPECIAL_CHANCES = {
+    "catgirl": 0.02,
+    "bard": 0.01,        # speaks only in verse
+    "earthbound": 0.01,  # stays as a whispering ghost after death
+    "gambler": 0.01,     # bets their lifespan at birth
+    "medium": 0.01,      # sees the outline of the words rubbed out on the echo wall
+    "believer": 0.01,    # worships the environment
+}
+LOVERS_CHANCE = 0.05   # two players born at the same moment are lovers
+
 # USD per 1M tokens at peak hours: (input cache hit, input cache miss, output).
 # Off-peak is half of peak.
 _PEAK_PRICES = {

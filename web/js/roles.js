@@ -53,10 +53,25 @@
     return c;
   }
 
-  function who(name, line, pers) {
+  // 稀有身份的标签：复活过的人标着「第几世」（金色），其他身份各有颜色
+  const SPECIAL_TAGS = { catgirl: ['cat', '猫娘'], bard: ['bard', '吟游诗人'], gambler: ['gambler', '赌徒'], medium: ['medium', '通灵者'],
+    believer: ['believer', '信徒'], earthbound: ['earthbound', '地缚灵'], lover: ['lover', '恋人'] };
+  function specialChip(r) {
+    if (r.special === 'revived') return el('span', 'chip holy', `第 ${r.life || 2} 世`);
+    const t = SPECIAL_TAGS[r.special];
+    return t ? el('span', `chip ${t[0]}`, t[1]) : null;
+  }
+  const GHOST_END = { dispersed: '最后魂飞魄散', faded: '最后渐渐消散', freed: '最后随同胞一起获得了自由' };
+
+  function who(name, line, pers, r) {
     const w = el('span', 'who');
     w.append(el('span', 'gname', name), el('span', 'gcause', line));
-    if (pers) w.append(chips(pers));
+    const tag = r && specialChip(r);
+    if (pers || tag) {
+      const c = chips(pers);
+      if (tag) c.prepend(tag);
+      w.append(c);
+    }
     return w;
   }
 
@@ -120,7 +135,7 @@
     const btn = el('button', 'grave px-box');
     btn.type = 'button';
     const victory = r.kind === 'victory';
-    btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause, r.personality),
+    btn.append(sprite(icon(r), 'gtomb'), frame(r.avatar), who(r.name, r.cause, r.personality, r),
       meta([`存活 ${r.rounds} 轮`, r.died_round != null ? `第 ${r.died_round} 轮${victory ? '解开了回廊' : '死亡'}` : '']));
     if (r.votes) btn.lastChild.append(HungerVotes.badge(r.votes, 'sealed'));
     btn.addEventListener('click', () => showDetail(r));
@@ -131,7 +146,7 @@
   function aliveItem(p) {
     const li = el('li');
     const card = el('div', 'grave alive px-box');
-    card.append(sprite('heart', 'gtomb'), frame(p.avatar), who(p.name, '在世，还没有墓碑', p.personality),
+    card.append(sprite('heart', 'gtomb'), frame(p.avatar), who(p.name, '在世，还没有墓碑', p.personality, p),
       meta([`已存活 ${p.age} 轮`]));
     card.lastChild.append(HungerVotes.badge(HungerVotes.tally(p.id)));
     li.append(card);
@@ -182,7 +197,13 @@
     const info = el('div', 'bio-info');
     info.append(el('div', 'gname', r.name), el('div', 'gcause', `${victory ? '功绩' : '死因'}：${r.cause}`),
       el('div', 'gmeta', lines));
-    if (r.personality) info.append(chips(r.personality));
+    if (r.personality || specialChip(r)) {
+      const c = chips(r.personality), tag = specialChip(r);
+      if (tag) c.prepend(tag);
+      info.append(c);
+    }
+    if (r.lover) info.append(el('div', 'gmeta', `与「${r.lover}」是一对恋人`));
+    if (r.ghost) info.append(el('div', 'gmeta', `死后化作地缚灵，低语了 ${r.ghost.whispers || 0} 次${GHOST_END[r.ghost.end] ? '，' + GHOST_END[r.ghost.end] : ''}`));
     if (r.votes) { // 观众的评价：死亡那一刻封存
       const v = el('div', 'gmeta bio-votes', '观众评价');
       v.append(HungerVotes.badge(r.votes, 'sealed'));

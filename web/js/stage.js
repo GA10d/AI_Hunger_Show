@@ -5,7 +5,13 @@
  *   - 宣告：双手高举，一道金光从天而降；
  *   - 死亡：处决=红光一闪、抽搐倒地、灵魂升天；宣告失败=白光吞没、碎成像素；自尽/寿尽=安静地跪下、灵魂升起；
  *            死后原地留下一块石碑（留了遗言）或木十字架（没来得及）；
- *   - 通关：全员欢呼跳跃，彩带落下，被困的同胞化作灵魂升向夜空。
+ *   - 通关：全员欢呼跳跃，彩带落下，被困的同胞化作灵魂升向夜空；
+ *   - 复活（spawn 时带 revived）：金光照下，地里冒出一块墓碑，墓碑碎开，人像灵魂一样从地里升起、展开翅膀，此后头顶一直顶着光环；
+ *   - 猫娘：身后拖着一条会摇的尾巴；吟游诗人开口时冒音符；赌徒开口时头上转骰子；信徒跪着祷告；
+ *     通灵者看见轮廓时额前紫光一闪；地缚灵体质的人身边飘着青色的游丝；
+ *   - 恋人：两人之间连着一根红线，时不时冒出小心心；一个死去，另一个殉情时洒下红色的心；
+ *   - 地缚灵：死后半透明的灵魂留在舞台上飘着，低语时飘到那个活人身边；魂飞魄散时炸成碎光，消散时慢慢变淡。
+ *   HungerStage.lovers(idA, idB)  .vision(id)  .haunt(player)  .ghostWhisper(ghostId, targetId)  .ghostGone(ghostId, reason)
  * canvas 的逻辑分辨率跟随容器：取整数放大倍数 s，逻辑尺寸 = 容器尺寸 / s，像素始终是整数倍放大。
  *
  *   HungerStage.spawn(player, {instant})   .say(id, {len})   .think(id)   .envSay()   .lastWords(id)
@@ -104,6 +110,7 @@
     }
     const clearEyes = () => [[3, 4], [4, 4], [3, 5], [4, 5], [7, 4], [8, 4], [7, 5], [8, 5]].forEach(([x, y]) => set(x, y, F));
     const clearMouth = () => { for (let x = 2; x <= 9; x++) { set(x, 7, F); set(x, 8, F); } };
+    const xEyes = () => [[3, 3], [3, 5], [4, 4], [5, 3], [5, 5]].forEach(([x, y]) => { set(x - 1, y, 'k'); set(x + 4, y, 'k'); });
     switch (expr) {
       case 'blink':
         clearEyes(); [3, 4, 7, 8].forEach(x => set(x, 5, 'k')); break;
@@ -118,8 +125,13 @@
         clearMouth(); [4, 5, 6, 7].forEach(x => set(x, 7, 'k')); set(3, 8, 'k'); set(8, 8, 'k');
         set(3, 3, 'k'); set(4, 3, 'k'); set(7, 3, 'k'); set(8, 3, 'k'); break;
       case 'dead': // × ×
-        clearEyes(); [[3, 3], [3, 5], [4, 4], [5, 3], [5, 5]].forEach(([x, y]) => { set(x - 1, y, 'k'); set(x + 4, y, 'k'); });
+        clearEyes(); xEyes();
         clearMouth(); [4, 5, 6, 7].forEach(x => set(x, 8, 'k')); break;
+      case 'xeyes': // 地缚灵：× × 的眼睛，嘴还是原来的
+        clearEyes(); xEyes(); break;
+      case 'xtalk': // 地缚灵在低语：× × 的眼睛，嘴一张一合
+        clearEyes(); xEyes();
+        clearMouth(); [4, 5, 6, 7].forEach(x => set(x, 7, 'k')); [5, 6].forEach(x => set(x, 8, 'k')); break;
       default:
     }
     return g;
@@ -160,6 +172,7 @@
     sweat: ['...c...', '..ccc..', '..ccc..', '.ccccc.', '..ccc..', '.......', '.......'],
     star: ['...y...', '...y...', 'yyyyyyy', '.yyyyy.', '..yyy..', '.yy.yy.', '.y...y.'],
     cross: ['...w...', '...w...', '.wwwww.', '...w...', '...w...', '...w...', '.......'],
+    dice: ['wwwwwww', 'wkwwwkw', 'wwwwwww', 'wwwrwww', 'wwwwwww', 'wkwwwkw', 'wwwwwww'],
   };
   const iconCache = {};
   const icon = name => iconCache[name] || (iconCache[name] = raster(ICONS[name].map(r => r.split(''))));
@@ -176,6 +189,8 @@
   let flash = null;     // { color, born, life, alpha }
   let candles = [];     // { x, until }
   let beams = [];       // 金色光柱 { actor }
+  let spirits = [];     // 地缚灵 { id, avatar, x, born, mode: 'idle' | 'whisper' | 'gone', target, until, end }
+  let lovers = null;    // 一对恋人的 id [a, b]
   let glow = 0;         // 通关时夜空泛金光到什么时候
   let eyeUntil = 0;     // 环境发言时，天上的眼睛亮到什么时候
   let eyeLook = 0;      // 眼睛看向的 x
@@ -204,7 +219,7 @@
     return {
       id: p.id, avatar: p.avatar, name: p.name, x, y: 0, dir: Math.random() < 0.5 ? 1 : -1,
       pose: 'idle', expr: 'normal', exprUntil: 0, nextFace: now() + rand(1200, 3000),
-      mode: 'idle', modeUntil: 0, target: null, wait: rand(400, 1400), emote: null, born: now(),
+      mode: 'idle', modeUntil: 0, target: null, wait: rand(400, 1400), emote: null, born: now(), special: p.special,
     };
   }
 
@@ -222,6 +237,9 @@
     const a = newActor(p, freeSpot());
     if (o.instant || REDUCED) {
       a.mode = 'idle';
+    } else if (o.revived) { // 复活：金光照下，墓碑从地里冒出来、碎开，人从地里升起
+      a.mode = 'revive'; a.t0 = now(); a.hidden = true; a.sink = 24;
+      beams.push({ actor: a });
     } else { // 从天上落下，落地后吃了一惊
       a.mode = 'enter'; a.modeUntil = now() + 520; a.y = -(GY + 4);
       spawnParticles(a.x + 6, 8, 10, ['#ffcd75', '#f4f4f4', '#73eff7'], { spread: 5, vy0: 5, vy1: 25, vx0: -6, vx1: 6, g: 10 });
@@ -236,11 +254,21 @@
     face(a, 'happy', 1100); emote(a, 'star', 1300);
   }
 
+  // 入场（从天而降）和复活还没演完：说话、心想不打断它们；遗言、宣告要演，就先让人立刻落地
+  const arriving = a => a.mode === 'enter' || a.mode === 'revive';
+  function settle(a) {
+    if (!arriving(a)) return;
+    a.mode = 'idle'; a.y = 0; a.sink = 0; a.hidden = false; a.ghostly = false;
+    beams = beams.filter(b => b.actor !== a);
+  }
+
   function say(id, o = {}) {
     const a = find(id);
     if (!a || o.instant) return;
-    if (a.mode === 'lastwords' || a.mode === 'declare') return;
+    if (a.mode === 'lastwords' || a.mode === 'declare' || arriving(a)) return;
     a.mode = 'speak';
+    if (a.special === 'bard') { emote(a, 'note', 1600); spawnParticles(a.x + 6, GY - 22, 3, ['#ffcd75', '#f4f4f4'], { spread: 4, vx0: -6, vx1: 6, vy0: -16, vy1: -8, g: 0, life0: 900, life1: 1400, size: 2 }); }
+    if (a.special === 'gambler') emote(a, 'dice', 1200);
     a.modeUntil = now() + Math.min(2600, 700 + (o.len || 20) * 45);
     a.target = null;
     const b = partnerOf(a);
@@ -250,7 +278,7 @@
 
   function think(id, o = {}) {
     const a = find(id);
-    if (!a || o.instant || a.mode === 'lastwords' || a.mode === 'declare') return;
+    if (!a || o.instant || a.mode === 'lastwords' || a.mode === 'declare' || arriving(a)) return;
     a.mode = 'think'; a.modeUntil = now() + 1500; a.target = null;
     emote(a, 'dots', 1500);
     eyeLook = a.x;
@@ -266,6 +294,7 @@
   function lastWords(id, o = {}) {
     const a = find(id);
     if (!a || REDUCED || o.instant) return;
+    settle(a);
     a.mode = 'lastwords'; a.modeUntil = now() + 4200; a.target = null; a.expr = 'sad'; a.exprUntil = a.modeUntil;
     candles.push({ x: a.x + (a.dir > 0 ? 15 : -15), until: a.modeUntil + 800, actor: a });
     eyeLook = a.x;
@@ -274,6 +303,7 @@
   function declare(id, o = {}) {
     const a = find(id);
     if (!a || REDUCED || o.instant) return;
+    settle(a);
     a.mode = 'declare'; a.modeUntil = now() + 30000; a.target = null; a.expr = 'normal';
     a.dir = 1;
     const cx = clampX(W / 2 - 6); // 走到舞台中央去宣告
@@ -291,8 +321,10 @@
       render();
       return;
     }
+    settle(a);
     a.mode = 'dying'; a.kind = r.kind; a.t0 = now(); a.marker = marker; a.target = null; a.emote = null;
     if (r.kind === 'execution') a.variant = o.variant || pick(VARIANTS); // 触发圣言：随机一种天罚
+    if (r.kind === 'heartbreak') spawnParticles(a.x + 6, GY - 14, 12, ['#e0607a', '#ff9ab0', '#b13e53'], { spread: 4, vx0: -10, vx1: 10, vy0: -22, vy1: -6, g: 20, life0: 900, life1: 1600, size: 2 });
     beams = beams.filter(b => b.actor !== a || r.kind === 'wrong_guess');
     candles = candles.filter(c => c.actor !== a);
     if (r.kind === 'wrong_guess') flash = { color: '#f4f4f4', born: now(), life: 500, alpha: 0.5 };
@@ -313,7 +345,94 @@
     }
   }
 
+  // ---------- 稀有身份 ----------
+  function setLovers(idA, idB) { lovers = [idA, idB]; }
+
+  function vision(id, o = {}) { // 通灵者睁开第三只眼：额前紫光一闪
+    const a = find(id);
+    if (!a || o.instant) return;
+    emote(a, 'star', 1400);
+    spawnParticles(a.x + 6, GY - 18, 14, ['#c28cd9', '#e0b8f0', '#73eff7'], { spread: 3, vx0: -14, vx1: 14, vy0: -18, vy1: 4, g: 0, life0: 700, life1: 1300 });
+  }
+
+  function haunt(p, o = {}) { // 死者没有离开：半透明的灵魂留在原地飘着
+    if (spirits.some(sp => sp.id === p.id)) return;
+    const a = actors.find(x => x.id === p.id);
+    spirits.push({ id: p.id, avatar: p.avatar, x: a ? a.x : rand(14, W - 30), born: o.instant ? now() - 2000 : now() + 1800, mode: 'idle' });
+  }
+
+  function ghostWhisper(id, targetId, o = {}) { // 飘到那个活人耳边
+    const sp = spirits.find(x => x.id === id), b = targetId != null && find(targetId);
+    if (!sp || o.instant) return;
+    sp.mode = 'whisper'; sp.until = now() + 3200; sp.target = b ? b.x + (b.x > sp.x ? -10 : 10) : sp.x;
+    if (b) { face(b, 'surprised', 1200); emote(b, 'sweat', 1400); }
+  }
+
+  function ghostGone(id, reason, o = {}) {
+    const sp = spirits.find(x => x.id === id);
+    if (!sp) return;
+    if (o.instant || REDUCED) { spirits = spirits.filter(x => x !== sp); return; }
+    sp.mode = 'gone'; sp.end = reason; sp.until = now() + (reason === 'dispersed' ? 0 : 1600);
+    if (reason === 'dispersed') { // 魂飞魄散：炸成青色和红色的碎光
+      shatter({ x: sp.x, y: -6 }, sprite(sp.avatar, 'idle', 'dead', 'ghost'), now(), {
+        vx: x => (x - 6) * rand(2, 5), vy: () => rand(-50, 10), g: 30, l0: 600, l1: 1300, colors: ['#73eff7', '#c9d6e0', '#ff4a4a', '#f4f4f4'],
+      });
+      flash = { color: '#73eff7', born: now(), life: 350, alpha: 0.3 };
+      spirits = spirits.filter(x => x !== sp);
+    }
+  }
+
+  function updateSpirits(t, dt) {
+    for (const sp of spirits) {
+      if (sp.mode === 'whisper') {
+        const dx = sp.target - sp.x;
+        if (Math.abs(dx) > 1) sp.x += Math.sign(dx) * Math.min(Math.abs(dx), 14 * dt / 1000);
+        if (t > sp.until) sp.mode = 'idle';
+      } else if (sp.mode === 'idle') {
+        sp.x = clampX(sp.x + Math.sin(t / 1300 + sp.id) * 2 * dt / 1000);
+      }
+      if (Math.random() < 0.08) particles.push({ x: sp.x + rand(2, 10), y: GY - 6, vx: rand(-2, 2), vy: rand(-10, -4), g: 0, born: t, life: rand(600, 1000), color: '#73eff7', size: 1 });
+    }
+    spirits = spirits.filter(sp => !(sp.mode === 'gone' && t > sp.until));
+  }
+
+  function drawSpirits(t) {
+    for (const sp of spirits) {
+      if (t < sp.born) continue; // 等死亡的演出结束才浮现
+      const talking = sp.mode === 'whisper' && Math.floor(t / 180) % 2;
+      const img = sprite(sp.avatar, 'idle', talking ? 'xtalk' : 'xeyes', 'ghost'); // 死后灵体化：眼睛变成 × ×
+      let alpha = Math.min(0.55, (t - sp.born) / 1200 * 0.55) * (0.8 + 0.2 * Math.sin(t / 300));
+      let y = GY - img.height - 6 + Math.round(Math.sin(t / 500 + sp.id) * 2);
+      if (sp.mode === 'gone') {
+        const k = 1 - Math.max(0, sp.until - t) / 1600;
+        alpha *= 1 - k;
+        if (sp.end === 'freed') y -= Math.round(k * (GY - 4));
+      }
+      ctx.globalAlpha = Math.max(0, alpha);
+      ctx.drawImage(img, Math.round(sp.x), y);
+      ctx.fillStyle = '#566c86'; // 拴在地上的锁链
+      for (let cy = y + img.height; cy < GY; cy += 2) ctx.fillRect(Math.round(sp.x) + 6 + (cy % 4 ? 1 : 0), cy, 1, 1);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  function drawThread(t) { // 恋人之间的红线：从一个人的手连到另一个人的手，垂成一道弧
+    if (!lovers) return;
+    const [a, b] = lovers.map(id => actors.find(x => x.id === id && x.mode !== 'dying' && !x.hidden));
+    if (!a || !b) return;
+    const [l, r] = a.x < b.x ? [a, b] : [b, a];
+    const x0 = Math.round(l.x) + 10, x1 = Math.round(r.x) + 2, y0 = GY - 7 + (l.y || 0), y1 = GY - 7 + (r.y || 0);
+    if (x1 <= x0) return;
+    ctx.fillStyle = '#e0607a';
+    for (let x = x0; x <= x1; x++) {
+      const k = (x - x0) / (x1 - x0);
+      ctx.fillRect(x, Math.round(y0 + (y1 - y0) * k + Math.sin(k * Math.PI) * 3), 1, 1);
+    }
+    if (Math.random() < 0.02) emote(Math.random() < 0.5 ? a : b, 'heart', 1200);
+  }
+
   function reset() {
+    spirits = []; lovers = null;
     actors = []; markers = []; ghosts = []; particles = []; candles = []; beams = []; flash = null; glow = 0;
     render();
   }
@@ -335,8 +454,11 @@
           if (t >= a.modeUntil) { a.y = 0; a.mode = 'idle'; face(a, 'surprised', 1000); emote(a, 'excl', 1000); }
           break;
         }
+        case 'revive':
+          updateRevive(a, t, el);
+          break;
         case 'speak':
-          a.pose = 'idle';
+          a.pose = a.special === 'believer' ? 'kneel' : 'idle'; // 信徒跪着祷告
           a.expr = Math.floor(t / 150) % 2 ? 'talk' : 'normal'; a.exprUntil = t + 50;
           if (t >= a.modeUntil) { a.mode = 'idle'; a.expr = 'normal'; a.wait = rand(300, 900); }
           break;
@@ -377,6 +499,12 @@
         if (b && a.mode === 'idle' && Math.abs(b.x - a.x) < 12) a.x += (a.x < b.x ? -1 : 1) * 6 * dt / 1000;
       }
     }
+    for (const a of actors) { // 地缚灵体质的人身边飘着青色的游丝；通灵者头上偶尔一点紫光
+      if (a.mode === 'dying' || a.hidden) continue;
+      if (a.special === 'earthbound' && Math.random() < 0.05) particles.push({ x: a.x + rand(0, 12), y: GY - rand(2, 16), vx: rand(-3, 3), vy: rand(-8, -3), g: 0, born: t, life: rand(700, 1100), color: '#73eff7', size: 1 });
+      if (a.special === 'medium' && Math.random() < 0.03) particles.push({ x: a.x + 6, y: GY - 18, vx: rand(-4, 4), vy: rand(-8, -2), g: 0, born: t, life: rand(500, 900), color: '#c28cd9', size: 1 });
+    }
+    updateSpirits(t, dt);
     actors = actors.filter(a => !a.gone);
     ghosts = ghosts.filter(g => t - g.born < g.life);
     particles = particles.filter(p => t - p.born < p.life);
@@ -416,6 +544,33 @@
       else if (roll < 0.84) { face(a, 'sad', 1200); emote(a, 'sweat'); }
       else if (roll < 0.94) { a.dir = -a.dir; a.target = null; a.wait = Math.max(a.wait, 500); }
       else face(a, 'blink', 160);
+    }
+  }
+
+  // ---------- 复活 ----------
+  const REVIVE_TOMB = 900, REVIVE_END = 2500;
+  function updateRevive(a, t, el) {
+    const fx = a.fx || (a.fx = {});
+    a.pose = 'idle';
+    if (el < REVIVE_TOMB) { // 光柱里落下金色的光点，一块墓碑从地里冒出来
+      a.hidden = true;
+      if (Math.random() < 0.5) spawnParticles(a.x + 6 + rand(-5, 5), rand(0, GY - 12), 1, ['#ffcd75', '#f4f4f4'], { vx0: -1, vx1: 1, vy0: 8, vy1: 18, g: 0, life0: 500, life1: 900 });
+      return;
+    }
+    if (!fx.cracked) { // 墓碑碎开：白光一闪，碎石四溅
+      fx.cracked = true; a.hidden = false;
+      flash = { color: '#f4f4f4', born: t, life: 420, alpha: 0.45 };
+      spawnParticles(a.x + 6, GY - 6, 24, ['#94b0c2', '#566c86', '#f4f4f4', '#ffcd75'], { spread: 5, vx0: -32, vx1: 32, vy0: -44, vy1: -8, g: 90, life0: 500, life1: 1100 });
+    }
+    const k = ease((el - REVIVE_TOMB) / 1200); // 从地里升起来，起初还是灵魂的样子
+    a.sink = Math.round(24 * (1 - k));
+    a.ghostly = el < REVIVE_TOMB + 1000;
+    a.expr = a.ghostly ? 'blink' : 'surprised';
+    if (Math.random() < 0.35) spawnParticles(a.x + 6, GY - 4, 1, ['#ffcd75', '#f4f4f4'], { spread: 7, vx0: -2, vx1: 2, vy0: -26, vy1: -10, g: -4, life0: 700, life1: 1300 });
+    if (el > REVIVE_END) {
+      a.mode = 'idle'; a.sink = 0; a.ghostly = false; a.wingsUntil = t + 1800;
+      beams = beams.filter(b => b.actor !== a);
+      face(a, 'happy', 1300); emote(a, 'star', 1500);
     }
   }
 
@@ -716,13 +871,51 @@
     }
   }
 
+  // 猫娘的尾巴：从屁股后面伸出来，弯上去，尖儿是白的，一摇一摇
+  const TAIL = [[-1, 0], [-2, 0], [-3, -1], [-4, -2], [-4, -3], [-4, -4], [-3, -5]];
+  function drawTail(a, t, x, y) {
+    const back = a.dir < 0 ? 1 : -1; // 尾巴在背后：往右走时在左边
+    const wag = Math.floor(t / 260) % 2;
+    const bx = back < 0 ? x + 1 : x + 10, by = y + 14;
+    TAIL.forEach(([dx, dy], i) => {
+      ctx.fillStyle = i === TAIL.length - 1 ? '#f4f4f4' : '#ef7d57';
+      const sway = i >= 4 ? wag * -back : 0;
+      ctx.fillRect(bx + back * -dx + sway, by + dy, 1, 1);
+    });
+  }
+
+  // 复活的人：头顶的光环；刚复活时身边还展开一对翅膀
+  function drawHalo(t, x, y) {
+    ctx.fillStyle = Math.floor(t / 400) % 2 ? '#ffcd75' : '#fff1c9';
+    ctx.fillRect(x + 3, y - 4, 6, 1); ctx.fillRect(x + 3, y - 2, 6, 1);
+    ctx.fillRect(x + 2, y - 3, 1, 1); ctx.fillRect(x + 9, y - 3, 1, 1);
+  }
+  function drawWings(t, x, y) {
+    const up = Math.floor(t / 150) % 2;
+    [[-1, x - 1], [1, x + 12]].forEach(([side, wx]) => {
+      for (let i = 0; i < 4; i++) { // 四根羽毛，越往外越短；扇动时整体抬高一格
+        const h = 6 - i, fy = y + 10 - up - (3 - i);
+        ctx.fillStyle = i === 3 ? '#94b0c2' : '#f4f4f4';
+        ctx.fillRect(wx + side * i, fy, 1, h);
+      }
+    });
+  }
+
   function drawActor(a, t) {
+    if (a.mode === 'revive' && a.hidden) { // 复活的第一幕：墓碑从地里冒出来
+      const rise = Math.max(0, 11 - Math.floor((t - a.t0) / 50));
+      blit(bitmap('tomb'), Math.round(a.x), GY - 11 + rise, false, 0.9);
+      return;
+    }
     if (a.hidden) return;
-    const kind = a.silhouette ? 'white' : (a.redTint ? 'red' : undefined);
+    const kind = a.silhouette ? 'white' : a.redTint ? 'red' : a.ghostly ? 'ghost' : undefined;
     const img = sprite(a.avatar, a.pose, a.expr, kind);
     const x = Math.round(a.x) + (a.shake || 0);
     const flip = a.dir < 0;
     const alpha = a.alpha != null ? a.alpha : 1;
+    const top = GY - img.height + (a.y || 0) + (a.sink || 0);
+    if (a.special === 'catgirl' && a.mode !== 'dying' && !a.sink) drawTail(a, t, x, top);
+    if ((a.mode === 'revive' && !a.hidden) || t < (a.wingsUntil || 0)) drawWings(t, x, top);
     if (!a.sink && a.y > -40) { // 影子
       ctx.fillStyle = 'rgba(26, 28, 44, .6)';
       const wide = a.y < -2 ? 4 : 8;
@@ -734,6 +927,7 @@
       blit(img, x, y, flip, alpha);
       ctx.restore();
     } else blit(img, x, y, flip, alpha);
+    if (a.special === 'revived' && a.mode !== 'dying' && !a.ghostly && !a.sink) drawHalo(t, x, y);
     if (a.emote) {
       const e = a.emote, k = (t - e.born) / e.dur;
       const ic = icon(e.name);
@@ -790,7 +984,9 @@
     drawMarkers(t);
     drawCandles(t);
     drawGhosts(t);
+    drawSpirits(t);
     actors.forEach(a => drawDeathFx(a, t, 'back'));
+    drawThread(t);
     [...actors].sort((a, b) => a.x - b.x).forEach(a => drawActor(a, t));
     actors.forEach(a => drawDeathFx(a, t, 'front'));
     drawParticles(t);
@@ -830,6 +1026,8 @@
 
   global.HungerStage = {
     VARIANTS, fitStage, spawn, introduce, say, think, envSay, lastWords, declare, die, victory, reset,
-    _debug: () => ({ actors: actors.map(a => ({ id: a.id, mode: a.mode, x: Math.round(a.x), pose: a.pose, expr: a.expr })), markers: markers.length, ghosts: ghosts.length, W, H }),
+    lovers: setLovers, vision, haunt, ghostWhisper, ghostGone,
+    _debug: () => ({ actors: actors.map(a => ({ id: a.id, mode: a.mode, x: Math.round(a.x), y: a.y, pose: a.pose, expr: a.expr,
+      hidden: !!a.hidden, alpha: a.alpha, sink: a.sink || 0, special: a.special })), markers: markers.length, ghosts: ghosts.length, W, H }),
   };
 })(window);

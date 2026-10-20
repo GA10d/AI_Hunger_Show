@@ -19,7 +19,7 @@ from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .client import DeepSeekClient
-from .config import LIFESPAN_MEAN, LIFESPAN_SD
+from .config import LIFESPAN_MEAN, LIFESPAN_SD, LOVERS_CHANCE, REVIVE_CHANCE, SPECIAL_CHANCES
 from .game import Game, load_recent_events
 from .playlist import MUSIC_DIR, write_playlist
 
@@ -238,6 +238,19 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
     return app
 
 
+def parse_specials(parser: argparse.ArgumentParser, items: list[str]) -> dict[str, float]:
+    out = {}
+    for item in items:
+        name, _, chance = item.partition("=")
+        try:
+            out[name.strip()] = float(chance)
+        except ValueError:
+            parser.error(f"--special wants NAME=CHANCE, got {item!r}")
+        if name.strip() not in SPECIAL_CHANCES:
+            parser.error(f"unknown identity {name!r}; known: {', '.join(SPECIAL_CHANCES)}")
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--host", default="127.0.0.1")
@@ -255,11 +268,17 @@ def main() -> None:
     p.add_argument("--seed", type=int)
     p.add_argument("--mean", type=float, default=LIFESPAN_MEAN, help="mean lifespan (rounds), for testing")
     p.add_argument("--sd", type=float, default=LIFESPAN_SD, help="lifespan standard deviation, for testing")
+    p.add_argument("--revive-chance", type=float, default=REVIVE_CHANCE, help="chance that a newcomer is the most liked dead player, revived")
+    p.add_argument("--special", action="append", default=[], metavar="NAME=CHANCE",
+                   help=f"override the chance of a rare identity ({', '.join(SPECIAL_CHANCES)}), e.g. --special medium=1")
+    p.add_argument("--lovers-chance", type=float, default=LOVERS_CHANCE, help="chance that two players born together are lovers")
     args = p.parse_args()
 
     game = Game(DeepSeekClient(), world=args.world, data_dir=args.data_dir, seed=args.seed,
                 lifespan_mean=args.mean, lifespan_sd=args.sd, round_delay=args.delay,
-                max_players=args.max_players, max_rounds=args.max_rounds, budget_usd=args.budget)
+                max_players=args.max_players, max_rounds=args.max_rounds, budget_usd=args.budget,
+                revive_chance=args.revive_chance, special_chances=parse_specials(p, args.special),
+                lovers_chance=args.lovers_chance)
     runner = Runner(game)
     if not args.no_autostart:
         runner.start()
