@@ -13,6 +13,7 @@ import subprocess
 import sys
 import threading
 import tkinter as tk
+import urllib.error
 import urllib.request
 import webbrowser
 from pathlib import Path
@@ -36,7 +37,7 @@ except Exception:
 # (label, key, default, hint)
 PARAMS = [
     ("端口", "port", "8000", "网页地址里的端口号"),
-    ("每轮间隔（秒）", "delay", "2", "越大越慢，也越省钱"),
+    ("每轮间隔（秒）", "delay", "2", "每次行动后停几秒；运行中改了点「应用」立刻生效"),
     ("费用上限（美元）", "budget", "1.0", "本次运行估算花费超过就自动暂停"),
     ("寿命平均值（轮）", "mean", "41", "正式规则是 41；调小可以更快看到死亡"),
     ("寿命标准差", "sd", "15", "正式规则是 15"),
@@ -257,8 +258,14 @@ class Launcher(tk.Tk):
         self.tips: dict[str, str] = {}
         for r, (label, key, _, hint) in enumerate(PARAMS):
             ttk.Label(box, text=label).grid(row=r, column=0, sticky="w", pady=2)
-            e = ttk.Entry(box, textvariable=self.vars[key], width=12)
-            e.grid(row=r, column=1, sticky="w", padx=(8, 0))
+            cell = ttk.Frame(box)
+            cell.grid(row=r, column=1, sticky="w", padx=(8, 0))
+            e = ttk.Entry(cell, textvariable=self.vars[key], width=12 if key != "delay" else 7)
+            e.pack(side="left")
+            if key == "delay":  # the only parameter that can change while the game runs
+                self.delay_btn = ttk.Button(cell, text="应用", width=5, command=self._apply_delay)
+                self.delay_btn.pack(side="left", padx=(4, 0))
+                e.bind("<Return>", lambda _e: self._apply_delay())
             ttk.Label(box, text=hint, style="Hint.TLabel").grid(row=r, column=2, sticky="w", padx=(8, 0))
             self.vars[key].trace_add("write", lambda *_: self._update_command())
 
@@ -642,6 +649,7 @@ class Launcher(tk.Tk):
                 self.status_label.config(text="● 服务已就绪，游戏未在运行" + (f"（{why}）" if why else ""), foreground="#b26a00")
             err = f"\n出错：{s['error']}" if s.get("error") else ""
             watching = f"　观众 {s['viewers']} 人" if s.get("viewers") is not None else ""
+            watching += f"　间隔 {s['delay']:g} 秒" if s.get("delay") is not None else ""
             self.status_sub.config(text=f"第 {s['round']} 轮　在世：{names}　墓园 {s['graveyard_count']} 人　"
                                         f"本次估算花费 ${s['cost_usd']:.4f}{watching}{err}")
         self._update_buttons()
@@ -655,6 +663,39 @@ class Launcher(tk.Tk):
                 self.logq.put(f"[{'开始' if action == 'start' else '暂停'}游戏]\n")
             except Exception as e:
                 self.logq.put(f"[请求失败] {e}\n")
+        threading.Thread(target=work, daemon=True).start()
+
+    def _apply_delay(self) -> None:
+        """Send the 每轮间隔 field to the running game (POST /api/speed); it takes effect at once, no restart."""
+        raw = self.vars["delay"].get().strip()
+        try:
+            delay = float(raw)
+        except ValueError:
+            self._bad(f"「每轮间隔」要填数字：{raw}")
+            return
+        if not 0 <= delay <= 3600:
+            self._bad("「每轮间隔」要在 0 ~ 3600 之间")
+            return
+        self._save_settings()
+        if not (self._running() and self.ready):
+            self._say(f"服务没在运行：每轮间隔 {delay:g} 秒会在下次启动服务时生效。", "sys")
+            return
+
+        def work():
+            try:
+                req = urllib.request.Request(f"{self._base()}/api/speed", method="POST",
+                                             data=json.dumps({"delay": delay}).encode("utf-8"),
+                                             headers={"X-Admin-Token": self.token, "Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=3).read()
+                self.logq.put(f"[调速] 每轮间隔改成 {delay:g} 秒，立刻生效\n")
+            except urllib.error.HTTPError as e:
+                if e.code in (404, 405):
+                    self.logq.put("[调速失败] 正在运行的服务是旧版本，不支持运行中调速：停止服务、再启动一次之后就能用了"
+                                  f"（现在重启，会直接用 {delay:g} 秒）。\n")
+                else:
+                    self.logq.put(f"[调速失败] {e}\n")
+            except Exception as e:
+                self.logq.put(f"[调速失败] {e}\n")
         threading.Thread(target=work, daemon=True).start()
 
     def _open_web(self) -> None:

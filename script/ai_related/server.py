@@ -115,7 +115,7 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
         return {"running": runner.running, "stop_reason": game.stop_reason, "error": runner.error,
                 "round": game.round, "players": [p.public() for p in game.players],
                 "graveyard_count": len(game.graveyard), "cost_usd": round(game.client.usage.cost_usd, 4),
-                "viewers": runner.viewers}
+                "viewers": runner.viewers, "delay": game.round_delay}
 
     @app.get("/api/graveyard")
     def graveyard():
@@ -173,6 +173,14 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
     @app.post("/api/start", dependencies=[Depends(owner_only)])
     def start():
         return {"started": runner.start()}
+
+    @app.post("/api/speed", dependencies=[Depends(owner_only)])
+    def speed(delay: float = Body(..., embed=True)):
+        """Change the pause after every action while the show runs: {"delay": seconds}. Takes effect at once."""
+        if not 0 <= delay <= 3600:
+            raise HTTPException(400, "delay must be between 0 and 3600 seconds")
+        game.round_delay = delay
+        return {"delay": delay}
 
     @app.post("/api/stop", dependencies=[Depends(owner_only)])
     def stop():
@@ -268,7 +276,8 @@ def main() -> None:
                    help="required (header X-Admin-Token) to start / stop the game; without it only direct local requests may")
     p.add_argument("--max-viewers", type=int, default=100, help="cap on simultaneous watchers")
     p.add_argument("--no-autostart", action="store_true", help="don't start the game; POST /api/start to begin")
-    p.add_argument("--delay", type=float, default=2.0, help="seconds to wait between rounds")
+    p.add_argument("--delay", type=float, default=2.0,
+                   help="seconds to wait after every action (can be changed while running: POST /api/speed)")
     p.add_argument("--budget", type=float, default=1.0, help="stop when estimated cost exceeds this (USD)")
     p.add_argument("--max-players", type=int)
     p.add_argument("--max-rounds", type=int)

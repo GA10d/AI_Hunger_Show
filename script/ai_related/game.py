@@ -265,6 +265,16 @@ class Game:
             return "budget"
         return None
 
+    def _rest(self) -> None:
+        """The pause after every action (round_delay seconds). Ends at once when the show is stopped, and follows a
+        speed change made while it waits (round_delay can be changed from the server while the game runs)."""
+        start = time.monotonic()
+        while not self._stop.is_set():
+            left = self.round_delay - (time.monotonic() - start)
+            if left <= 0:
+                return
+            self._stop.wait(min(left, 0.5))
+
     def _alive(self, p: Player) -> bool:
         return any(q is p for q in self.players)
 
@@ -293,8 +303,7 @@ class Game:
                     p.age += 1
                 if self.won:
                     break
-                if self.round_delay:
-                    time.sleep(self.round_delay)
+                self._rest()
                 if self._alive(p) and p.heartbroken:  # that was the last thing they did without their lover
                     yield from self._kill([(p, "heartbreak", self.H["heartbreak_reason"], "")])
                 elif self._alive(p) and p.age >= p.lifespan:
