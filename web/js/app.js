@@ -95,7 +95,7 @@
       }
       case 'message':
         thought(ev);
-        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, text: ev.text, to: ev.to, instant },
+        HungerChat.add({ kind: 'message', who: ev.who, name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text, to: ev.to, instant },
           show(() => {
             tick();
             if (ev.who === 'env') HungerStage.envSay({ instant });
@@ -108,7 +108,7 @@
         break;
       case 'lastwords':
         thought(ev);
-        HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, text: ev.text,
+        HungerChat.add({ kind: 'message', who: 'player', name: ev.name, avatar: ev.avatar, pid: ev.player_id, text: ev.text,
           ghost: true, instant }, show(() => { tick(); HungerStage.lastWords(ev.player_id, { instant }); }));
         break;
       case 'guess': // 宣告：向门外的存在说出还原的全部真相
@@ -129,6 +129,7 @@
           text: `「${r.name}」完整地宣告了真相。锁已经打开，所有被困的同胞，自由了。`,
           note: ev.freed && ev.freed.length ? `同一刻获释的同伴：${ev.freed.join('、')}` : '',
         }, show(() => {
+          HungerVotes.freeze(r);
           HungerStage.victory(r, { instant, freed: ev.freed });
           state.alive.clear();
           if (!state.live) state.demoGraveyard.push(r);
@@ -141,6 +142,7 @@
           kind: 'death', record: r, instant,
           onOpen: () => HungerRoles.open({ record: r }),
         }, show(() => {
+          HungerVotes.freeze(r);
           HungerStage.die(r, { instant });
           state.alive.delete(r.id);
           if (!state.live) {
@@ -219,6 +221,7 @@
     es.addEventListener('hello', () => { flowing = true; setMode('LIVE'); });
     es.onerror = () => setMode('重连中…');
     es.onmessage = e => handleEvent(JSON.parse(e.data));
+    es.addEventListener('votes', e => HungerVotes.update(JSON.parse(e.data))); // 观众的点赞 / 点踩，所有人同步
     setTimeout(() => {
       if (flowing) return;
       es.close();
@@ -227,7 +230,6 @@
   }
 
   function pollLive() {
-    const viewer = Math.random().toString(36).slice(2);
     let after = -1;
     (async function tick() {
       try {
@@ -235,12 +237,23 @@
         setMode('LIVE');
         after = data.last;
         data.events.forEach(handleEvent);
+        HungerVotes.update(data.votes);
       } catch (e) {
         setMode('重连中…');
       }
       setTimeout(tick, 1000);
     })();
   }
+
+  // 观众的身份：存在本机，刷新页面也还是同一个人（投过的票认得出来）
+  const viewer = (() => {
+    const fresh = Math.random().toString(36).slice(2) + Date.now().toString(36);
+    try {
+      const id = localStorage.getItem('hunger-viewer') || fresh;
+      localStorage.setItem('hunger-viewer', id);
+      return id;
+    } catch (e) { return fresh; }
+  })();
 
   async function getJSON(url) {
     const r = await fetch(url, { cache: 'no-store' });
@@ -263,6 +276,7 @@
     const server = await detectLive();
     state.live = !!server;
     state.idle = !!server && !server.running;
+    HungerVotes.init({ live: state.live, viewer, toast });
     HungerRoles.init({
       graveyard: state.live ? graveyardFromServer : async () => state.demoGraveyard.slice(),
       current: () => [...state.alive.values()],
@@ -271,9 +285,12 @@
     if (state.live) {
       setMode('LIVE');
       if (state.idle) setPaused(true, server.error ? '演出出错，正在抢修' : STOP_REASONS[server.stop_reason] || '演出还没有开始', true);
+      getJSON(`/api/votes?viewer=${encodeURIComponent(viewer)}`)
+        .then(d => { HungerVotes.update(d.tallies); HungerVotes.setMine(d.mine); }).catch(() => {});
       connectLive();
     } else {
       setMode('DEMO');
+      HungerVotes.update(HungerDemo.VOTES);
       if (!params.has('empty')) HungerDemo.EVENTS.forEach(handleEvent);
     }
     const roles = params.get('roles');

@@ -611,6 +611,54 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---------- 观众投票：点头像弹出 👍 / 👎，头像下面挂着计数 ---------- */
+.av-col { flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.avatar.votable { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.avatar.votable:hover { --edge: var(--gold); }
+.avatar.votable:focus-visible { outline: var(--px) dashed var(--gold); outline-offset: var(--px); }
+.vote-tally { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; line-height: 12px; color: var(--paper); white-space: nowrap; }
+.vote-tally .vt { display: inline-flex; align-items: center; gap: 2px; }
+.vote-tally .sprite { width: 12px; height: 12px; }
+.vote-tally b { font-weight: normal; min-width: 1ch; }
+.vote-tally.zero { opacity: .45; }
+.vote-tally.mine-up .vt.up b { color: var(--gold); }
+.vote-tally.mine-down .vt.down b { color: #e0607a; }
+.vote-tally.bump { animation: vote-bump .4s steps(4); }
+.vote-tally.sealed .vt { opacity: .85; }
+.death-box .vote-tally { margin-top: 2px; }
+.grave .gmeta .vote-tally { margin-top: 2px; }
+.bio-votes { display: flex; align-items: center; gap: 8px; }
+.vote-pop { /* 浮在头像上方的两个按钮 */
+  --fill: var(--ink);
+  --edge: var(--gold);
+  position: fixed;
+  z-index: 25;
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+}
+.vote-pop[hidden] { display: none; }
+.vote-pop.show { animation: pop .18s steps(3) both; }
+.vbtn {
+  display: block;
+  width: 44px;
+  height: 44px;
+  padding: 4px;
+  border: 0;
+  background: var(--navy);
+  box-shadow: inset -4px -4px 0 rgba(0, 0, 0, .35);
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+.vbtn .sprite { width: 36px; height: 36px; }
+.vbtn:hover { background: #3b5dc9; }
+.vbtn:active { transform: translateY(2px); box-shadow: none; }
+.vbtn:focus-visible { outline: 2px dashed var(--gold); outline-offset: 2px; }
+.vbtn.up.on { background: #8a6a2a; box-shadow: inset 0 0 0 4px var(--gold); }
+.vbtn.down.on { background: #5d275d; box-shadow: inset 0 0 0 4px #e0607a; }
+@keyframes vote-bump { 50% { transform: translateY(-3px) scale(1.15); } }
+
 /* 悄悄话：只有同伴听得到——气泡换成紫色，名字后面写着对谁说 */
 .msg.whisper .bubble { --fill: #3a2a5c; }
 .msg.whisper .bubble .name { color: #e0a9ff; }
@@ -797,6 +845,78 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
 .gcause { color: var(--paper); font-size: 14px; line-height: 1.5; overflow-wrap: anywhere; }
 .gmeta { color: var(--mist); font-size: 12px; line-height: 1.5; white-space: nowrap; }
 .grave .gmeta { display: flex; flex-direction: column; align-items: flex-end; }
+
+/* ---------- 墓园最上面：人气之星 / 众矢之的 ---------- */
+.hall { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0 var(--px) 20px; }
+.hall-card {
+  --g-icon: 60px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  margin: var(--px);
+  padding: 10px 8px 12px;
+  border: 0;
+  color: var(--paper);
+  font: inherit;
+  text-align: center;
+  overflow: hidden;
+}
+button.hall-card { cursor: pointer; -webkit-tap-highlight-color: transparent; }
+button.hall-card:focus-visible { outline: var(--px) dashed var(--gold); outline-offset: calc(2 * var(--px)); }
+.hall-card.best { /* 金边、聚光灯 */
+  --edge: var(--gold);
+  --fill: #2b2a4a;
+  background: radial-gradient(ellipse 60% 70% at 50% 34%, rgba(255, 205, 117, .32), transparent 70%), var(--fill);
+}
+.hall-card.worst { /* 阴天、雨 */
+  --edge: #8d5a8f;
+  --fill: #221a33;
+  background: linear-gradient(to bottom, rgba(51, 60, 87, .9), transparent 70%), var(--fill);
+}
+.hall-card.vacant { --edge: var(--steel); }
+.hall-card.best:not(.vacant) .gname { color: var(--gold); text-shadow: 0 0 8px rgba(255, 205, 117, .6); }
+.hall-card.worst:not(.vacant) .gname { color: #e0a9ff; }
+.hall-card .gname { font-size: 16px; max-width: 100%; }
+.hall-title { font-size: 13px; letter-spacing: .3em; margin-right: -.3em; color: var(--mist); }
+.hall-card.best .hall-title { color: var(--gold); }
+.hall-card.worst .hall-title { color: #e0607a; }
+.hall-art { position: relative; display: flex; flex-direction: column; align-items: center; padding-top: 52px; }
+.hall-art .gav { margin: var(--px) auto; }
+.hall-art .gav.gone .sprite { filter: grayscale(.6) brightness(.85); }
+.hall-empty { display: flex; align-items: center; justify-content: center; font-size: 28px; color: var(--steel); }
+.hall-crown { position: absolute; top: 0; left: 50%; width: 60px; height: 60px; margin-left: -30px; animation: bob 1.2s steps(2) infinite; }
+.hall-spark { position: absolute; width: 24px; height: 24px; animation: twinkle 1.6s steps(2) infinite; }
+.hall-spark.s1 { left: -26px; top: 40px; }
+.hall-spark.s2 { right: -28px; top: 64px; animation-delay: .5s; }
+.hall-spark.s3 { left: -20px; bottom: 0; width: 12px; height: 12px; animation-delay: 1s; }
+.hall-cloud { position: absolute; top: -6px; left: 50%; width: 72px; height: 72px; margin-left: -36px; animation: drift 2.6s steps(4) infinite alternate; z-index: 1; }
+.hall-rain { /* 乌云下的雨：一格一格往下落的像素雨滴 */
+  position: absolute;
+  top: 40px;
+  left: 50%;
+  width: 52px;
+  height: 72px;
+  margin-left: -26px;
+  background: repeating-linear-gradient(to bottom, var(--cyan) 0 4px, transparent 4px 12px) 6px 0 / 2px 24px repeat-y,
+    repeating-linear-gradient(to bottom, var(--cyan) 0 4px, transparent 4px 12px) 22px 8px / 2px 24px repeat-y,
+    repeating-linear-gradient(to bottom, var(--cyan) 0 4px, transparent 4px 12px) 38px 4px / 2px 24px repeat-y;
+  opacity: .8;
+  animation: rain .6s steps(3) infinite;
+  pointer-events: none;
+}
+.hall-tomato { position: absolute; width: 36px; height: 36px; z-index: 2; }
+.hall-tomato.t1 { right: -18px; top: 58px; transform: rotate(18deg); }
+.hall-tomato.t2 { left: -16px; bottom: -2px; width: 24px; height: 24px; transform: rotate(-24deg); }
+.hall-count { display: inline-flex; align-items: center; gap: 6px; font-size: 18px; line-height: 24px; }
+.hall-count .sprite { width: 24px; height: 24px; }
+.hall-count b { font-weight: normal; }
+.hall-card.best .hall-count b { color: var(--gold); }
+.hall-card.worst .hall-count b { color: #e0607a; }
+.hall-sub { font-size: 11px; line-height: 1.4; color: var(--mist); }
+@keyframes drift { from { transform: translateX(-3px); } to { transform: translateX(3px); } }
+@keyframes rain { to { background-position: 6px 24px, 22px 32px, 38px 28px; } }
 
 /* 人物生平 */
 .bio { padding: 0 var(--px); }
@@ -987,7 +1107,8 @@ button.grave:focus-visible { outline: var(--px) dashed var(--gold); outline-offs
   .msg, .msg.typing .text::after, .sp-ghost .avatar, .epitaph-head .candle, .death-box,
   .sacred, .sacred::after, .s-head .sprite, .px-btn.music-on .sprite, .px-btn.pulse, .live-badge .dot,
   .echo-wall, .e-line.shown, .e-line .blank { animation: none; }
-  .tape span, .sign, .stage-closed.closing .tape-a, .stage-closed.closing .tape-b, .stage-closed.closing .sign { animation: none; }
+  .tape span, .sign, .stage-closed.closing .tape-a, .stage-closed.closing .tape-b, .stage-closed.closing .sign,
+  .vote-tally.bump, .vote-pop.show, .hall-crown, .hall-spark, .hall-cloud, .hall-rain { animation: none; }
 }
 .instant .msg, .instant .divider, .instant .death-box, .instant .sacred, .instant .persona,
 .instant .echo-wall, .instant .e-line.shown { animation: none; }

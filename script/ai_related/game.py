@@ -35,6 +35,7 @@ from .config import (DEFAULT_MODEL, LIFESPAN_MAX, LIFESPAN_MEAN, LIFESPAN_MIN, L
                      SPAWN_IF_TWO, SPAWN_TWO_IF_ONE, SUMMARY_MODEL)
 from .judge import Judge, Oracle, Verdict
 from .prompts import Prompts, fill
+from .votes import VoteBox
 from .world import load_world
 
 ENV_NAME = "环境"
@@ -191,6 +192,7 @@ class Game:
         self.spawned = 0
         self.next_id = max((r["id"] for r in self.graveyard), default=0) + 1
         self.won = False
+        self.votes = VoteBox()  # the audience's thumbs up / down, frozen into the grave record at death
         self.session = int(time.time())  # lets the page tell a restart apart from a continuation
         self.stop_reason: str | None = None
         self._stop = threading.Event()
@@ -573,6 +575,7 @@ class Game:
                       "biography": biography, "last_words": p.last_words, "kind": kind,
                       "born_round": p.born_round, "died_round": self.round,
                       "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+            record["votes"] = self.votes.close(p.id)
             if p.personality:
                 record["personality"] = shown(p.personality)
             if rest and rest[0]:
@@ -609,7 +612,7 @@ class Game:
         record = {"id": p.id, "name": p.name, "avatar": p.avatar, "rounds": p.age, "cause": self.H["victory_cause"],
                   "biography": biography, "last_words": p.last_words, "kind": "victory",
                   "born_round": p.born_round, "died_round": self.round,
-                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds")}
+                  "died_at": datetime.now().astimezone().isoformat(timespec="seconds"), "votes": self.votes.close(p.id)}
         self.graveyard.append(record)
         self._save_graveyard()
         self.won = True

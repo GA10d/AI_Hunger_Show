@@ -14,7 +14,7 @@ import time
 from pathlib import Path
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -133,6 +133,36 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
                 return record
         raise HTTPException(404, "no such player")
 
+    def address(request: Request) -> str:
+        """Who is voting, as far as an address tells: behind a Cloudflare tunnel every request comes from localhost,
+        so the visitor's own address is in cf-connecting-ip (only trusted when the request really came through it)."""
+        host = request.client.host if request.client else ""
+        if host in ("127.0.0.1", "::1"):
+            return request.headers.get("cf-connecting-ip") or request.headers.get("x-forwarded-for", "").split(",")[0].strip() or host
+        return host
+
+    def tallies() -> dict:
+        return game.votes.tallies(p.id for p in game.players)
+
+    @app.get("/api/votes")
+    def votes(viewer: str = ""):
+        """The thumbs on the players on the field, and which ones this viewer gave."""
+        pids = [p.id for p in game.players]
+        return {"tallies": game.votes.tallies(pids), "mine": game.votes.mine(viewer[:64], pids) if viewer else {}}
+
+    @app.post("/api/vote")
+    def vote(request: Request, player_id: int = Body(...), vote: int = Body(...), viewer: str = Body(...)):
+        """Anyone watching may vote (1 up, -1 down, 0 take it back), once per player, while that player is on the field."""
+        viewer = viewer.strip()[:64]
+        if vote not in (-1, 0, 1) or not viewer:
+            raise HTTPException(400, "vote must be 1, -1 or 0, with a viewer id")
+        if not any(p.id == player_id for p in game.players):
+            raise HTTPException(409, "this player is no longer on the field")
+        tally = game.votes.cast(player_id, viewer, vote, address(request))
+        if tally is None:
+            raise HTTPException(429, "too many voters from this address")
+        return {"player_id": player_id, "vote": vote, **tally}
+
     @app.post("/api/start", dependencies=[Depends(owner_only)])
     def start():
         return {"started": runner.start()}
@@ -167,7 +197,11 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
                 # proves the stream really flows; behind a proxy that buffers SSE it never arrives and the page polls
                 yield "event: hello\ndata: {}\n\n"
                 idle = 0.0
+                seen_votes = -1
                 while not await request.is_disconnected():
+                    if game.votes.version != seen_votes:  # the thumbs: a named event, never part of the history
+                        seen_votes = game.votes.version
+                        yield f"event: votes\ndata: {json.dumps(tallies())}\n\n"
                     batch = runner.since(index)
                     for i, event in enumerate(batch, start=index):
                         event = mark_replay(event, i, total, fresh)
@@ -196,7 +230,7 @@ def create_app(runner: Runner, admin_token: str | None = None, max_viewers: int 
         index, total, fresh = resume(after)
         batch = runner.since(index)
         return {"events": [mark_replay(e, i, total, fresh) for i, e in enumerate(batch, start=index)],
-                "last": index + len(batch) - 1}
+                "last": index + len(batch) - 1, "votes": tallies()}
 
     if MUSIC_DIR.is_dir():  # the page asks for ../music/<file>, which from "/" resolves to /music/<file>
         app.mount("/music", StaticFiles(directory=MUSIC_DIR), name="music")

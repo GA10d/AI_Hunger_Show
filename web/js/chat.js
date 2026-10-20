@@ -1,5 +1,5 @@
 /* 对话区：气泡队列（打字机效果）、分隔条，以及三种“特殊轮”的对话框。
- *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, text, ghost, to, instant }, onShow)   // to = 悄悄话的对象
+ *   HungerChat.add({ kind: 'message', who: 'env' | 'player', name, avatar, pid, text, ghost, to, instant }, onShow)   // to = 悄悄话的对象；pid = 选手 id（有它，头像才能投票）
  *   HungerChat.add({ kind: 'divider', icon: 'heart', text, instant }, onShow)
  *   HungerChat.add({ kind: 'persona', name, avatar, personality, instant }, onShow)   // 入场时亮出的性格卡：一个优点 + 一个缺点
  *   HungerChat.add({ kind: 'death', record, onOpen, instant }, onShow)
@@ -52,6 +52,13 @@
     // 名字和台词都用 textContent：这里放的是 LLM 生成的文本，不能当 HTML 解析
     el.querySelector('.name').textContent = item.ghost ? `† ${item.name} · 遗言 †` : item.to ? `${item.name} → ${item.to}（悄悄话）` : item.name;
     if (item.to) el.classList.add('whisper'); // 悄悄话：只有同伴听得到，环境不会回应
+    if (!isEnv && item.pid != null) { // 选手的头像：点一下给他点赞 / 点踩，头像下面挂着计数
+      const av = el.querySelector('.avatar');
+      const col = document.createElement('div');
+      col.className = 'av-col';
+      av.replaceWith(col);
+      col.append(av, HungerVotes.attach(av, item.pid, item.name));
+    }
     Sprites.mount(el);
     return el;
   }
@@ -99,6 +106,7 @@
     el.querySelector('.d-cause').textContent = `死因：${r.cause}`;
     el.querySelector('.d-meta').textContent =
       [r.died_round != null ? `第 ${r.died_round} 轮` : '', `存活 ${r.rounds} 轮`, '点击查看生平'].filter(Boolean).join(' · ');
+    if (r.votes) el.querySelector('.d-body').append(HungerVotes.badge(r.votes, 'sealed')); // 观众的评价，随死亡封存
     if (item.onOpen) el.addEventListener('click', item.onOpen);
     Sprites.mount(el);
     return el;

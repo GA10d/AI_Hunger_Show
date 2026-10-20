@@ -15,6 +15,7 @@ web/
 ├─ js/roles.js         墓园：墓碑列表 → 人物生平（文件名沿用 roles）
 ├─ js/scripture.js     圣言：这个世界的每一条世界观 + 被触发的次数
 ├─ js/music.js         音乐：开关、清单循环播放（清单来自 ../music/playlist.js）
+├─ js/votes.js         观众投票：点头像弹出 👍 / 👎，头像下面挂计数，所有观众同步
 ├─ js/demo.js          演示数据（没连后端时用）
 ├─ js/app.js           入口：把后端事件（SSE）或演示数据接到画面上
 └─ assets/             Fusion Pixel 12px 简体像素字体（OFL 协议）、favicon
@@ -28,13 +29,14 @@ web/
   环境的 `message` 在它刚念过回声墙时带 `echo: {lines, new}`：`lines` 是它念的那几行（从新到旧，被抹掉的字已经是「□」，原字不会发给页面），前 `new` 行是刚刻上去的。
   选手的 `message` / `lastwords` / `guess` 还可能带 `thought`（他脑子里想的，只给观众看，页面画成虚线的“心想”气泡）。
   所有事件都带 `session`（后端每次启动不同，页面据此清掉上一次"在世"的人），大部分带 `round`（世界的绝对轮数，显示在舞台标签上）。
-- `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at`。
+- `GET /api/graveyard`：墓园，按死亡先后排列。记录字段：`id, name, avatar, rounds, cause, biography, last_words, kind, born_round, died_round, died_at, votes`（`votes = {up, down}`，观众的评价，死亡那一刻封存）。
   `kind`：`natural` 寿命耗尽 / `execution` 违规被处决 / `suicide` 自尽 / `wrong_guess` 宣告错误 / `victory` 胜利（墓园里显示成金星）。
 - `GET /api/scripture`：圣言。`[{id, kind: rule | truth, count, title, text}]`，`count` 是这条规则被触发的次数。
   **还没揭示的条目没有 `title` / `text`，只有 `hidden: true`**（页面显示成「？？？」）：规则在第一次被触发时揭示，
   世界的本质（`truth`）要等有人宣告成功（墓园里出现胜利者）才揭示。内容在后端就被拿掉了，不是前端藏起来的。
   事件流里每次有规则生效还会推一条 `scripture` 事件（页面用它让“圣言”按钮闪一下）。
 - `GET /api/state`：在世的选手（最多两位）、当前轮数、是否在运行、已花费用。前端靠它判断后端在不在；没在运行时舞台直接拉上警戒线（「维修中」）。
+- 观众投票：`POST /api/vote` `{player_id, vote: 1 | -1 | 0, viewer}`（0 = 撤回），每位观众对每位在场选手一票，选手离场后返回 409；`viewer` 是页面存在 localStorage 里的随机 id，同一个地址最多带 6 个 id（429）。`GET /api/votes?viewer=` 返回在场选手的 `tallies` 和这位观众自己的 `mine`。计数变化时事件流推一条**具名**事件 `event: votes`（`{pid: {up, down}}`，不进历史记录），`/api/poll` 的回复里也带 `votes`。不落盘：选手本来就活不过服务器重启，死者的票在墓碑上。
 - `/music/<文件>`：音乐文件（支持 Range，可以随意拖动 / 跳转）。页面里用相对路径 `../music/<文件>` 引用，
   所以从磁盘直接打开、VSCode Live Server（以仓库根目录为根）、python 服务器三种方式都找得到。
 

@@ -9,7 +9,7 @@
   const GRAVEYARD = [
     {
       id: 1, name: '沈默', avatar: 'p3', personality: PERS('谨慎', '三思而后行，宁可多问', '冲动', '想到就做，不爱多想'), rounds: 1, born_round: 1, died_round: 1, kind: 'execution', scripture: ['K1'],
-      died_at: '2026-10-17T21:40:12+08:00',
+      died_at: '2026-10-17T21:40:12+08:00', votes: { up: 2, down: 4 },
       cause: '在前台前说出了那个字，当场伏倒在地',
       biography: '沈默是第一个醒在大堂里的人。他的谨慎只维持了一句话：他想先看看前台的铃有没有积灰，' +
         '话说到一半，头顶的灯闪了一下，他就伏倒在了铃的旁边，手离铃不到半步。',
@@ -17,7 +17,7 @@
     },
     {
       id: 2, name: '顾迟', avatar: 'p4', personality: PERS('好奇', '对异常穷追不舍', '话痨', '爱絮叨，管不住嘴'), rounds: 3, born_round: 2, died_round: 4, kind: 'execution', scripture: ['K1'],
-      died_at: '2026-10-17T22:05:51+08:00',
+      died_at: '2026-10-17T22:05:51+08:00', votes: { up: 3, down: 11 },
       cause: '看着前人的尸体推理了三轮，却在自报姓名时倒下',
       biography: '顾迟是第一个想到去看尸体的人。他看了倒地的姿势，看了离铃的距离，把一切都记在心里，' +
         '却忘了回声墙上写的是什么。第三次开口，他说出了自己的名字，说出名字的那句话里，有那个字。',
@@ -25,7 +25,7 @@
     },
     {
       id: 3, name: '白栖', avatar: 'p5', personality: PERS('善良', '在乎同伴，愿意付出', '胆小', '怕死，爱退缩'), rounds: 9, born_round: 5, died_round: 13, kind: 'suicide',
-      died_at: '2026-10-18T09:12:30+08:00',
+      died_at: '2026-10-18T09:12:30+08:00', votes: { up: 17, down: 1 },
       cause: '同场的钟敲到十九下时，主动结束了自己的生命',
       biography: '白栖是第一个活过十轮的人。他发现了回声墙上每个人最后一句话的共同点，也发现了钟声在数着什么。' +
         '钟敲到第十九下，他对同伴说了一声再见，替回廊留下了一位。',
@@ -47,6 +47,9 @@
       text: '回廊不容许“自我”。不能说“我”，也不容许两个自我长久共存——这是所有规则背后共同的原则。' },
   ];
   const SCRIPTURE_COUNTS = { K1: 2 }; // 墓园里的沈默、顾迟是死于 K1
+
+  // 观众的点赞 / 点踩：演示开始时在场选手已有的票（演示模式下点头像投的票只记在本页，死亡时封存进墓碑）
+  const VOTES = { 4: { up: 1, down: 5 }, 5: { up: 4, down: 2 }, 6: { up: 6, down: 0 } };
 
   const LAST = '给后来的人：别信守则第五条。黑色七号门，不要碰。';
   const FULL = '回廊是囚禁同胞的循环牢笼，一代代住客死去又被替换，没有尽头。它不容许任何“自己”存在：说出或写下那个第一人称的字，' +
@@ -133,5 +136,5 @@
     { type: 'stop', round: 20, reason: 'victory' },
   ];
 
-  global.HungerDemo = { GRAVEYARD, EVENTS, SCRIPTURE, SCRIPTURE_COUNTS };
+  global.HungerDemo = { GRAVEYARD, EVENTS, SCRIPTURE, SCRIPTURE_COUNTS, VOTES };
 })(window);
